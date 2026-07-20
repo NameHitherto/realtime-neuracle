@@ -1,0 +1,856 @@
+[
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 1,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1001,
+    "phase1_seed": 11001,
+    "phase2_seed": 21001,
+    "train_shape": [
+      320,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      256,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.3013817369937897,
+    "best_val_acc": 0.859375,
+    "best_val_kappa": 0.8125,
+    "test_acc": 0.84375,
+    "test_kappa": 0.7916666666666666,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_001_phase2.pth",
+    "label_mapping": {
+      "rest": 0,
+      "feet": 1,
+      "left_hand": 2,
+      "right_hand": 3
+    },
+    "mu_scale_mean_abs": 0.0015728058060631156,
+    "beta_scale_mean_abs": 0.0008696661680005491,
+    "cosine_scale": 30.011383056640625
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 2,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1002,
+    "phase1_seed": 11002,
+    "phase2_seed": 21002,
+    "train_shape": [
+      813,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      650,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.2133160260008888,
+    "best_val_acc": 0.9263803680981595,
+    "best_val_kappa": 0.9018367961457392,
+    "test_acc": 0.8875,
+    "test_kappa": 0.85,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_002_phase2.pth",
+    "label_mapping": {
+      "rest": 0,
+      "right_hand": 1,
+      "feet": 2,
+      "left_hand": 3
+    },
+    "mu_scale_mean_abs": 0.004123781807720661,
+    "beta_scale_mean_abs": 0.004804209806025028,
+    "cosine_scale": 32.19517517089844
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 3,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1003,
+    "phase1_seed": 11003,
+    "phase2_seed": 21003,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.04951826347546144,
+    "best_val_acc": 0.9829545454545454,
+    "best_val_kappa": 0.9772727272727273,
+    "test_acc": 0.99375,
+    "test_kappa": 0.9916666666666667,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_003_phase2.pth",
+    "label_mapping": {
+      "feet": 0,
+      "left_hand": 1,
+      "rest": 2,
+      "right_hand": 3
+    },
+    "mu_scale_mean_abs": 0.0031542254146188498,
+    "beta_scale_mean_abs": 0.00261879526078701,
+    "cosine_scale": 29.640090942382812
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 4,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1004,
+    "phase1_seed": 11004,
+    "phase2_seed": 21004,
+    "train_shape": [
+      897,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      717,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.05855443138215277,
+    "best_val_acc": 0.9722222222222222,
+    "best_val_kappa": 0.962962962962963,
+    "test_acc": 0.975,
+    "test_kappa": 0.9666666666666667,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_004_phase2.pth",
+    "label_mapping": {
+      "right_hand": 0,
+      "feet": 1,
+      "rest": 2,
+      "left_hand": 3
+    },
+    "mu_scale_mean_abs": 0.0026653031818568707,
+    "beta_scale_mean_abs": 0.00199533230625093,
+    "cosine_scale": 29.09345817565918
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 5,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1005,
+    "phase1_seed": 11005,
+    "phase2_seed": 21005,
+    "train_shape": [
+      720,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      576,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.08415534409383933,
+    "best_val_acc": 0.9791666666666666,
+    "best_val_kappa": 0.9722222222222222,
+    "test_acc": 0.96875,
+    "test_kappa": 0.9583333333333334,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_005_phase2.pth",
+    "label_mapping": {
+      "rest": 0,
+      "left_hand": 1,
+      "right_hand": 2,
+      "feet": 3
+    },
+    "mu_scale_mean_abs": 0.002895524725317955,
+    "beta_scale_mean_abs": 0.0022387078497558832,
+    "cosine_scale": 30.09062957763672
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 6,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1006,
+    "phase1_seed": 11006,
+    "phase2_seed": 21006,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.1764225953004577,
+    "best_val_acc": 0.9261363636363636,
+    "best_val_kappa": 0.9015151515151515,
+    "test_acc": 0.95625,
+    "test_kappa": 0.9416666666666667,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_006_phase2.pth",
+    "label_mapping": {
+      "feet": 0,
+      "left_hand": 1,
+      "right_hand": 2,
+      "rest": 3
+    },
+    "mu_scale_mean_abs": 0.002426845021545887,
+    "beta_scale_mean_abs": 0.0017966150771826506,
+    "cosine_scale": 31.38665199279785
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 7,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1007,
+    "phase1_seed": 11007,
+    "phase2_seed": 21007,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.2654227885332974,
+    "best_val_acc": 0.8920454545454546,
+    "best_val_kappa": 0.8560606060606061,
+    "test_acc": 0.89375,
+    "test_kappa": 0.8583333333333334,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_007_phase2.pth",
+    "label_mapping": {
+      "right_hand": 0,
+      "feet": 1,
+      "rest": 2,
+      "left_hand": 3
+    },
+    "mu_scale_mean_abs": 0.0026831920258700848,
+    "beta_scale_mean_abs": 0.0019798597786575556,
+    "cosine_scale": 31.259925842285156
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 8,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1008,
+    "phase1_seed": 11008,
+    "phase2_seed": 21008,
+    "train_shape": [
+      654,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      523,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.17866081238247966,
+    "best_val_acc": 0.9694656488549618,
+    "best_val_kappa": 0.959291485394655,
+    "test_acc": 0.96875,
+    "test_kappa": 0.9583333333333334,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_008_phase2.pth",
+    "label_mapping": {
+      "feet": 0,
+      "right_hand": 1,
+      "left_hand": 2,
+      "rest": 3
+    },
+    "mu_scale_mean_abs": 0.001810224261134863,
+    "beta_scale_mean_abs": 0.00301910936832428,
+    "cosine_scale": 31.25098991394043
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 9,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1009,
+    "phase1_seed": 11009,
+    "phase2_seed": 21009,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.12066531757062132,
+    "best_val_acc": 0.9772727272727273,
+    "best_val_kappa": 0.9696969696969697,
+    "test_acc": 0.9625,
+    "test_kappa": 0.95,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_009_phase2.pth",
+    "label_mapping": {
+      "left_hand": 0,
+      "right_hand": 1,
+      "rest": 2,
+      "feet": 3
+    },
+    "mu_scale_mean_abs": 0.0005490314215421677,
+    "beta_scale_mean_abs": 0.0008149973582476377,
+    "cosine_scale": 30.598194122314453
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 10,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1010,
+    "phase1_seed": 11010,
+    "phase2_seed": 21010,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.20494339547374033,
+    "best_val_acc": 0.9375,
+    "best_val_kappa": 0.9166666666666666,
+    "test_acc": 0.9375,
+    "test_kappa": 0.9166666666666666,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_010_phase2.pth",
+    "label_mapping": {
+      "left_hand": 0,
+      "rest": 1,
+      "right_hand": 2,
+      "feet": 3
+    },
+    "mu_scale_mean_abs": 0.0020402364898473024,
+    "beta_scale_mean_abs": 0.0017930979374796152,
+    "cosine_scale": 30.00096321105957
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 11,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1011,
+    "phase1_seed": 11011,
+    "phase2_seed": 21011,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.019683674274181776,
+    "best_val_acc": 0.9943181818181818,
+    "best_val_kappa": 0.9924242424242424,
+    "test_acc": 0.95625,
+    "test_kappa": 0.9416666666666667,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_011_phase2.pth",
+    "label_mapping": {
+      "right_hand": 0,
+      "left_hand": 1,
+      "feet": 2,
+      "rest": 3
+    },
+    "mu_scale_mean_abs": 0.0003512569237500429,
+    "beta_scale_mean_abs": 0.0004932218580506742,
+    "cosine_scale": 27.589635848999023
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 12,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1012,
+    "phase1_seed": 11012,
+    "phase2_seed": 21012,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.10757817869836633,
+    "best_val_acc": 0.9715909090909091,
+    "best_val_kappa": 0.9621212121212122,
+    "test_acc": 0.95625,
+    "test_kappa": 0.9416666666666667,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_012_phase2.pth",
+    "label_mapping": {
+      "right_hand": 0,
+      "left_hand": 1,
+      "rest": 2,
+      "feet": 3
+    },
+    "mu_scale_mean_abs": 0.002160214353352785,
+    "beta_scale_mean_abs": 0.0021072225645184517,
+    "cosine_scale": 29.697479248046875
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 13,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1013,
+    "phase1_seed": 11013,
+    "phase2_seed": 21013,
+    "train_shape": [
+      800,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      640,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.08968528956174851,
+    "best_val_acc": 0.9625,
+    "best_val_kappa": 0.95,
+    "test_acc": 0.94375,
+    "test_kappa": 0.925,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_013_phase2.pth",
+    "label_mapping": {
+      "rest": 0,
+      "right_hand": 1,
+      "feet": 2,
+      "left_hand": 3
+    },
+    "mu_scale_mean_abs": 0.002157694660127163,
+    "beta_scale_mean_abs": 0.0011729702819138765,
+    "cosine_scale": 28.77730369567871
+  },
+  {
+    "dataset": "hgd",
+    "moabb_dataset": "Schirrmeister2017",
+    "task": "MI all classes",
+    "split": "run_train_test",
+    "model": "cosine-temporal",
+    "subject": 14,
+    "num_classes": 4,
+    "split_seed": 42,
+    "model_seed": 1014,
+    "phase1_seed": 11014,
+    "phase2_seed": 21014,
+    "train_shape": [
+      880,
+      44,
+      1000
+    ],
+    "test_shape": [
+      160,
+      44,
+      1000
+    ],
+    "train_window_shape": [
+      704,
+      44,
+      1000
+    ],
+    "test_window_shape": [
+      160,
+      44,
+      1000
+    ],
+    "sfreq": 250.0,
+    "fmin": 4.0,
+    "fmax": 122.0,
+    "local_bcic_start": 0.0,
+    "local_bcic_stop": 0.0,
+    "standardize": true,
+    "crop": null,
+    "embedding_dim": 512,
+    "output_bins": [
+      16,
+      10,
+      6
+    ],
+    "best_val_loss": 0.029551480304111134,
+    "best_val_acc": 0.9943181818181818,
+    "best_val_kappa": 0.9924242424242424,
+    "test_acc": 0.88125,
+    "test_kappa": 0.8416666666666667,
+    "checkpoint": "results\\hgd_cosine_temporal_14subjects_v1\\hgd\\cosine-temporal\\hgd_cosine-temporal_subject_014_phase2.pth",
+    "label_mapping": {
+      "right_hand": 0,
+      "left_hand": 1,
+      "rest": 2,
+      "feet": 3
+    },
+    "mu_scale_mean_abs": 0.0017641553422436118,
+    "beta_scale_mean_abs": 0.0027201420161873102,
+    "cosine_scale": 29.864917755126953
+  }
+]

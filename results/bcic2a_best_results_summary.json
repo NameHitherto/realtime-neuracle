@@ -1,0 +1,65 @@
+[
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 1,
+    "official_test_acc": 0.8819444444444444,
+    "official_test_kappa": 0.8425925925925926,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_s01_s08_v1\\hyena_local_weighted_variance_bcic2a_subject_01.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 2,
+    "official_test_acc": 0.7326388888888888,
+    "official_test_kappa": 0.6435185185185186,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_s02_s06_v1\\hyena_local_weighted_variance_bcic2a_subject_02.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 3,
+    "official_test_acc": 0.9409722222222222,
+    "official_test_kappa": 0.9212962962962963,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_remaining_v1\\hyena_local_weighted_variance_bcic2a_subject_03.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 4,
+    "official_test_acc": 0.7986111111111112,
+    "official_test_kappa": 0.7314814814814814,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_remaining_v1\\hyena_local_weighted_variance_bcic2a_subject_04.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 5,
+    "official_test_acc": 0.7847222222222222,
+    "official_test_kappa": 0.712962962962963,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_remaining_v1\\hyena_local_weighted_variance_bcic2a_subject_05.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 6,
+    "official_test_acc": 0.6597222222222222,
+    "official_test_kappa": 0.5462962962962963,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_s02_s06_v1\\hyena_local_weighted_variance_bcic2a_subject_06.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 7,
+    "official_test_acc": 0.9375,
+    "official_test_kappa": 0.9166666666666666,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_remaining_v1\\hyena_local_weighted_variance_bcic2a_subject_07.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 8,
+    "official_test_acc": 0.8680555555555556,
+    "official_test_kappa": 0.8240740740740741,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_s01_s08_v1\\hyena_local_weighted_variance_bcic2a_subject_08.pth"
+  },
+  {
+    "model": "hyena_input_motor_rhythm_enhanced_classifier",
+    "subject": 9,
+    "official_test_acc": 0.875,
+    "official_test_kappa": 0.8333333333333334,
+    "checkpoint": "E:\\运动想象算法\\SST-DPN-Hyena\\results_hyena_input_motor_rhythm_enhanced_remaining_v1\\hyena_local_weighted_variance_bcic2a_subject_09.pth"
+  }
+]
