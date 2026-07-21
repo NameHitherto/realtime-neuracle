@@ -135,9 +135,23 @@ class LSLControlOutlet:
         self.stream_name = stream_name
         self.stream_type = stream_type
         self.sample_rate = float(sample_rate)
+        self.last_value: int | None = None
+        self.last_push_at: float | None = None
 
     def push(self, value: int):
         self.outlet.push_sample([float(value)])
+        self.last_value = int(value)
+        self.last_push_at = time.time()
+
+    def have_consumers(self) -> bool:
+        """Return whether at least one LSL inlet is currently connected."""
+        checker = getattr(self.outlet, "have_consumers", None)
+        if checker is None:
+            return False
+        try:
+            return bool(checker())
+        except Exception:
+            return False
 
 
 class RealTimePreprocessor:

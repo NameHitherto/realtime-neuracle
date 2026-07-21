@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-REQUIRED_PACKAGES = ["numpy", "scipy", "einops", "pylsl", "torch"]
+REQUIRED_PACKAGES = ["numpy", "scipy", "einops", "pylsl", "torch", "fastapi", "uvicorn", "PIL"]
 ROOT = Path(__file__).resolve().parent
 
 

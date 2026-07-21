@@ -1,5 +1,14 @@
+# Core inference dependencies
 numpy
 scipy
 einops
-pylsl
 torch
+
+# EEG/game transport
+pylsl
+
+# Local telemetry dashboard
+fastapi
+uvicorn[standard]
+pydantic
+Pillow
