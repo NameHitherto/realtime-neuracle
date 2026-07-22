@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import io
+import math
 import os
 import sys
 import threading
@@ -49,76 +49,56 @@ CONTROL_NAMES = {0: "left", 1: "right", 2: "forward", 3: "stop"}
 DISPLAY_CHANNELS = ["C3", "Cz", "C4", "CP3", "CPz", "CP4", "Pz"]
 
 
-class GameCapture:
-    """Best-effort local screenshot capture for the dashboard.
+class LocalEEGSimulator:
+    """Simulates EEG data stream from a local BDF file using mne."""
 
-    It intentionally has no hard dependency on a capture package. PIL's
-    ImageGrab is enough for the first local diagnostic version; a future
-    Windows Graphics Capture adapter can replace this class without changing
-    the API.
-    """
+    def __init__(self, file_path: str, channel_names: list[str], sampling_rate: float, buffer_seconds: float):
+        self.file_path = file_path
+        self.channel_names = list(channel_names)
+        self.sampling_rate = float(sampling_rate)
+        self.eeg_channel_names = [ch for ch in self.channel_names if ch.upper() != "TRG"]
+        self.n_chan_eeg = len(self.eeg_channel_names)
+        from realtime_common import RingBuffer
+        self.buffer = RingBuffer(self.n_chan_eeg, int(math.ceil(buffer_seconds * sampling_rate)))
+        self._data: np.ndarray | None = None
+        self._current_pos = 0
+        self._total_samples = 0
 
-    def __init__(self, bus: TelemetryBus, bbox: tuple[int, int, int, int] | None, process_name: str, interval: float = 0.2):
-        self.bus = bus
-        self.bbox = bbox
-        self.process_name = process_name
-        self.interval = interval
-        self._latest: bytes | None = None
-        self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+    def __enter__(self):
+        import mne
+        raw = mne.io.read_raw_bdf(self.file_path, preload=True, verbose=False)
+        # Pick only the channels we need
+        available = raw.ch_names
+        picks = []
+        for ch in self.eeg_channel_names:
+            for avail in available:
+                if ch.upper() in avail.upper() or avail.upper().startswith(ch.upper()):
+                    picks.append(avail)
+                    break
+        if not picks:
+            raise ValueError(f"Could not find any matching channels in BDF file. Available: {available}")
+        data, _ = raw[picks, :]
+        self._data = np.asarray(data, dtype=np.float32)
+        self._total_samples = self._data.shape[1]
+        self._current_pos = 0
+        return self
 
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._loop, name="game-capture", daemon=True)
-        self._thread.start()
+    def __exit__(self, exc_type, exc, tb):
+        self._data = None
 
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=1.0)
-
-    def latest(self) -> bytes | None:
-        with self._lock:
-            return self._latest
-
-
-    def _game_process_alive(self) -> bool:
-        if not self.process_name:
-            return False
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["tasklist", "/FI", f"IMAGENAME eq {self.process_name}"],
-                capture_output=True, text=True, timeout=1.0, check=False,
-            )
-            return self.process_name.lower() in result.stdout.lower()
-        except Exception:
-            return False
-
-    def _loop(self) -> None:
-        try:
-            from PIL import ImageGrab
-        except Exception as exc:
-            self.bus.event("warning", "游戏画面采集不可用", error=str(exc))
-            self.bus.update(status={"game_capture": "unavailable"})
-            return
-        while not self._stop.is_set():
-            try:
-                image = ImageGrab.grab(bbox=self.bbox, all_screens=True)
-                image.thumbnail((1280, 720))
-                output = io.BytesIO()
-                image.convert("RGB").save(output, format="JPEG", quality=78, optimize=True)
-                payload = output.getvalue()
-                with self._lock:
-                    self._latest = payload
-                process_alive = self._game_process_alive()
-                self.bus.update(
-                    status={"game_capture": "running", "game_process": "running" if process_alive else "stopped"},
-                    game={"capture_age_ms": 0, "capture_size": len(payload), "process_name": self.process_name, "process_alive": process_alive},
-                )
-            except Exception as exc:
-                self.bus.update(status={"game_capture": "error"}, game={"capture_error": str(exc)})
-            self._stop.wait(self.interval)
+    def poll(self, max_samples: int | None = None):
+        if self._data is None:
+            raise RuntimeError("LocalEEGSimulator is not initialized")
+        max_samples = max_samples or max(1, int(self.sampling_rate // 10))
+        # Simulate real-time by advancing position
+        end_pos = min(self._current_pos + max_samples, self._total_samples)
+        if end_pos > self._current_pos:
+            chunk = self._data[:, self._current_pos:end_pos]
+            self.buffer.append(chunk)
+            self._current_pos = end_pos
+        # Loop back to beginning when we reach the end
+        if self._current_pos >= self._total_samples:
+            self._current_pos = 0
 
 
 class InferenceRuntime:
@@ -148,7 +128,6 @@ class InferenceRuntime:
         self._last_eeg_at = 0.0
         self._last_inference_at = 0.0
         self._smoother: deque[np.ndarray] = deque(maxlen=max(1, int(args.smooth_n)))
-        self.capture = GameCapture(bus, args.capture_bbox, args.game_process_name)
 
     def _model_spec(self):
         if self.model_name == "hgd":
@@ -156,7 +135,6 @@ class InferenceRuntime:
         return BCIC2A_CHANNELS, BCIC2A_CLASSES, BCIC2A_CONTROL_MAP, BCIC2A_CHECKPOINT, build_bcic2a
 
     def start(self) -> None:
-        self.capture.start()
         self._thread = threading.Thread(target=self._loop, name="inference-runtime", daemon=True)
         self._thread.start()
 
@@ -164,7 +142,6 @@ class InferenceRuntime:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=2.0)
-        self.capture.stop()
         self.bus.update(status={"inference": "stopped", "device_tcp": "stopped"})
 
     def manual_control(self, control: int, duration_ms: int = 1000) -> None:
@@ -222,14 +199,26 @@ class InferenceRuntime:
             game={"telemetry_level": "inferred"},
         )
         try:
-            with DataServer(
-                host=self.args.host,
-                port=self.args.port,
-                channel_names=stream_channels,
-                sampling_rate=self.args.device_sfreq,
-                buffer_seconds=max(self.args.window_sec + 2.0, self.args.window_sec * 2),
-            ) as server:
+            # Choose data source based on --eeg-source
+            if self.args.eeg_source == "local":
+                server = LocalEEGSimulator(
+                    file_path=self.args.local_eeg_file,
+                    channel_names=stream_channels,
+                    sampling_rate=self.args.device_sfreq,
+                    buffer_seconds=max(self.args.window_sec + 2.0, self.args.window_sec * 2),
+                )
+                self.bus.event("info", "使用本地 EEG 数据模拟", file=self.args.local_eeg_file)
+            else:
+                server = DataServer(
+                    host=self.args.host,
+                    port=self.args.port,
+                    channel_names=stream_channels,
+                    sampling_rate=self.args.device_sfreq,
+                    buffer_seconds=max(self.args.window_sec + 2.0, self.args.window_sec * 2),
+                )
                 self.bus.event("info", "已连接 EEG TCP 数据流", host=self.args.host, port=self.args.port)
+            
+            with server:
                 self.bus.update(status={"device_tcp": "connected", "inference": "running"})
                 while not self._stop.is_set():
                     try:
@@ -237,8 +226,8 @@ class InferenceRuntime:
                     except TimeoutError:
                         continue
                     except OSError as exc:
-                        self.bus.event("error", "EEG TCP 连接中断", error=str(exc))
-                        self.bus.update(status={"device_tcp": "error", "inference": "error"}, health={"level": "red", "message": "EEG TCP 连接中断"})
+                        self.bus.event("error", "EEG 连接中断", error=str(exc))
+                        self.bus.update(status={"device_tcp": "error", "inference": "error"}, health={"level": "red", "message": "EEG 连接中断"})
                         break
                     now = time.time()
                     if now >= next_publish:
@@ -334,8 +323,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lsl-rate", type=float, default=10.0)
     parser.add_argument("--default-control", type=int, default=3)
     parser.add_argument("--min-confidence", type=float, default=0.0)
-    parser.add_argument("--capture-bbox", nargs=4, type=int, default=None, metavar=("LEFT", "TOP", "RIGHT", "BOTTOM"))
-    parser.add_argument("--game-process-name", default="虚拟任务竞速赛.exe")
+    parser.add_argument("--eeg-source", choices=["neuracle", "local"], default="neuracle")
+    parser.add_argument("--local-eeg-file", default=None)
     return parser
 
 
@@ -358,4 +347,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

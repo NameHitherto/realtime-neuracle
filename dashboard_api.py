@@ -84,13 +84,6 @@ def create_app(bus: TelemetryBus, runtime: Any) -> FastAPI:
         finally:
             bus.unsubscribe(on_update)
 
-    @app.get("/media/game.jpg")
-    def game_frame() -> Response:
-        frame = runtime.capture.latest()
-        if not frame:
-            raise HTTPException(status_code=404, detail="No game frame captured yet")
-        return Response(content=frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
-
     if DIST.exists():
         app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
