@@ -34,7 +34,13 @@ def create_app(bus: TelemetryBus, runtime: Any) -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "telemetry": bus.snapshot().get("health", {})}
+        snapshot = bus.snapshot()
+        inference = snapshot.get("status", {}).get("inference")
+        return {
+            "ok": inference in {"running", "dry-run"},
+            "telemetry": snapshot.get("health", {}),
+            "status": snapshot.get("status", {}),
+        }
 
     @app.get("/api/status")
     def status() -> dict[str, Any]:

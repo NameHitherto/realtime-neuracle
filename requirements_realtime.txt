@@ -6,6 +6,7 @@ torch
 
 # EEG/game transport
 pylsl
+mne
 
 # Local telemetry dashboard
 fastapi

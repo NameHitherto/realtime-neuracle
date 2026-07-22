@@ -47,6 +47,11 @@ from realtime_hgd_4class import (  # noqa: E402
 
 CONTROL_NAMES = {0: "left", 1: "right", 2: "forward", 3: "stop"}
 DISPLAY_CHANNELS = ["C3", "Cz", "C4", "CP3", "CPz", "CP4", "Pz"]
+LOCAL_CHANNEL_DERIVATIONS = {
+    "CPZ": ("CP1", "CP2"),
+    "P1": ("PZ", "P3"),
+    "P2": ("PZ", "P4"),
+}
 
 
 class LocalEEGSimulator:
@@ -63,24 +68,48 @@ class LocalEEGSimulator:
         self._data: np.ndarray | None = None
         self._current_pos = 0
         self._total_samples = 0
+        self._started_at = 0.0
+        self._samples_emitted = 0
+        self.derived_channels: dict[str, tuple[str, ...]] = {}
 
     def __enter__(self):
         import mne
         raw = mne.io.read_raw_bdf(self.file_path, preload=True, verbose=False)
-        # Pick only the channels we need
-        available = raw.ch_names
-        picks = []
-        for ch in self.eeg_channel_names:
-            for avail in available:
-                if ch.upper() in avail.upper() or avail.upper().startswith(ch.upper()):
-                    picks.append(avail)
-                    break
-        if not picks:
-            raise ValueError(f"Could not find any matching channels in BDF file. Available: {available}")
-        data, _ = raw[picks, :]
-        self._data = np.asarray(data, dtype=np.float32)
+        available_by_name = {name.strip().upper(): name for name in raw.ch_names}
+        missing: list[str] = []
+        channel_sources: list[tuple[str, ...]] = []
+        for channel in self.eeg_channel_names:
+            key = channel.strip().upper()
+            if key in available_by_name:
+                channel_sources.append((available_by_name[key],))
+                continue
+            source_keys = LOCAL_CHANNEL_DERIVATIONS.get(key)
+            if source_keys and all(source in available_by_name for source in source_keys):
+                sources = tuple(available_by_name[source] for source in source_keys)
+                channel_sources.append(sources)
+                self.derived_channels[channel] = sources
+                continue
+            missing.append(channel)
+        if missing:
+            raise ValueError(
+                "BDF file is missing required model channels: "
+                + ", ".join(missing)
+                + ". Available channels: "
+                + ", ".join(raw.ch_names)
+            )
+        file_sfreq = float(raw.info["sfreq"])
+        if not math.isclose(file_sfreq, self.sampling_rate, rel_tol=0.0, abs_tol=1e-6):
+            raw.resample(self.sampling_rate, verbose=False)
+        # Preserve model order and average neighboring electrodes for absent
+        # intermediate 10-10 positions in this 64-channel cap.
+        rows = [raw.get_data(picks=list(sources)).mean(axis=0) for sources in channel_sources]
+        # MNE exposes EEG in volts. The rest of this realtime stack and the
+        # dashboard use microvolts, matching the Neuracle TCP stream.
+        self._data = np.asarray(rows, dtype=np.float32) * 1_000_000.0
         self._total_samples = self._data.shape[1]
         self._current_pos = 0
+        self._started_at = time.monotonic()
+        self._samples_emitted = 0
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -90,15 +119,19 @@ class LocalEEGSimulator:
         if self._data is None:
             raise RuntimeError("LocalEEGSimulator is not initialized")
         max_samples = max_samples or max(1, int(self.sampling_rate // 10))
-        # Simulate real-time by advancing position
-        end_pos = min(self._current_pos + max_samples, self._total_samples)
-        if end_pos > self._current_pos:
-            chunk = self._data[:, self._current_pos:end_pos]
-            self.buffer.append(chunk)
-            self._current_pos = end_pos
-        # Loop back to beginning when we reach the end
-        if self._current_pos >= self._total_samples:
-            self._current_pos = 0
+        due = int((time.monotonic() - self._started_at) * self.sampling_rate) - self._samples_emitted
+        if due <= 0:
+            time.sleep(min(0.01, 1.0 / self.sampling_rate))
+            return
+        remaining = min(due, max_samples)
+        chunks: list[np.ndarray] = []
+        while remaining > 0:
+            count = min(remaining, self._total_samples - self._current_pos)
+            chunks.append(self._data[:, self._current_pos : self._current_pos + count])
+            self._current_pos = (self._current_pos + count) % self._total_samples
+            self._samples_emitted += count
+            remaining -= count
+        self.buffer.append(np.concatenate(chunks, axis=1))
 
 
 class InferenceRuntime:
@@ -219,6 +252,12 @@ class InferenceRuntime:
                 self.bus.event("info", "已连接 EEG TCP 数据流", host=self.args.host, port=self.args.port)
             
             with server:
+                if isinstance(server, LocalEEGSimulator) and server.derived_channels:
+                    self.bus.event(
+                        "warning",
+                        "本地 BDF 缺少部分模型导联，已使用邻近导联插值",
+                        derived_channels=server.derived_channels,
+                    )
                 self.bus.update(status={"device_tcp": "connected", "inference": "running"})
                 while not self._stop.is_set():
                     try:
@@ -236,6 +275,8 @@ class InferenceRuntime:
                     if now < next_infer:
                         continue
                     next_infer = now + self.args.step_sec
+                    if server.buffer.n_updates < n_points:
+                        continue
                     try:
                         raw_all = server.buffer.latest(n_points)
                         raw_model = select_model_channels(raw_all, eeg_stream_channels, self.model_channels)
@@ -246,6 +287,7 @@ class InferenceRuntime:
                         self._last_inference_at = now
                         display_indices = [eeg_stream_channels.index(ch) for ch in DISPLAY_CHANNELS if ch in eeg_stream_channels]
                         display = raw_all[display_indices, -min(raw_all.shape[-1], int(self.args.device_sfreq * 2)) :] if display_indices else raw_all[: min(4, raw_all.shape[0]), -int(self.args.device_sfreq * 2) :]
+                        display = display - display.mean(axis=-1, keepdims=True)
                         display = self._downsample(display, 50)
                         self._last_eeg_at = now
                         self.bus.update(

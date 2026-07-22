@@ -35,6 +35,7 @@ const pythonCandidates = [
   'C:\\Python310\\python.exe',
   'C:\\Program Files\\Python312\\python.exe',
   'C:\\Program Files\\Python311\\python.exe',
+  'E:\\Anaconda\\python.exe',
   'C:\\Users\\namehitherto\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
 ]
 
