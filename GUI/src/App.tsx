@@ -661,14 +661,6 @@ function App() {
           <EventList events={events} />
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="flex justify-between py-5 text-xs text-gray-400 tracking-wide">
-        <span>BCI Racing Instrumentation · local diagnostic build 0.1</span>
-        <span>
-          Telemetry truth level: <b className="text-amber-500 font-normal">inferred</b>
-        </span>
-      </footer>
     </main>
   )
 }
