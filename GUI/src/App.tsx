@@ -155,6 +155,9 @@ function App() {
   const [gamePath, setGamePath] = useState('')
   const [gameRunning, setGameRunning] = useState(false)
   const [launchMessage, setLaunchMessage] = useState('')
+  // Collapse states for launch panels
+  const [serviceCollapsed, setServiceCollapsed] = useState(false)
+  const [gameCollapsed, setGameCollapsed] = useState(false)
   // EEG display controls
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
   const [singleChannel, setSingleChannel] = useState<string | null>(null)
@@ -214,6 +217,7 @@ function App() {
         },
       })
       setServiceRunning(true)
+      setServiceCollapsed(true)
       showMessage('模型推理服务已启动')
     } catch (e) {
       showMessage(`启动失败: ${e instanceof Error ? e.message : String(e)}`)
@@ -224,6 +228,7 @@ function App() {
     try {
       await invoke('stop_python_service')
       setServiceRunning(false)
+      setServiceCollapsed(false)
       showMessage('模型推理服务已停止')
     } catch (e) {
       showMessage(`停止失败: ${e instanceof Error ? e.message : String(e)}`)
@@ -238,6 +243,7 @@ function App() {
     try {
       await invoke('start_game_process', { payload: { game_path: gamePath } })
       setGameRunning(true)
+      setGameCollapsed(true)
       showMessage('赛车游戏已启动')
     } catch (e) {
       showMessage(`启动失败: ${e instanceof Error ? e.message : String(e)}`)
@@ -248,6 +254,7 @@ function App() {
     try {
       await invoke('stop_game_process')
       setGameRunning(false)
+      setGameCollapsed(false)
       showMessage('赛车游戏已停止')
     } catch (e) {
       showMessage(`停止失败: ${e instanceof Error ? e.message : String(e)}`)
@@ -293,184 +300,214 @@ function App() {
         {/* Model Service Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <SectionTitle eyebrow="LAUNCH" title="模型推理服务" meta={serviceRunning ? '运行中' : '已停止'} />
-          <div className="p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">Python 路径（单选）</label>
-                <div className="space-y-1.5 rounded-lg border border-gray-200 p-2.5">
-                  {availablePythonPaths.map((path) => (
-                    <label key={path} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="python-path"
-                        checked={pythonPath === path}
-                        onChange={() => setPythonPath(path)}
-                        className="accent-blue-600"
-                      />
-                      <span className="truncate" title={path}>{path === 'python' ? '系统 PATH (python)' : path}</span>
-                    </label>
-                  ))}
-                  <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="python-path"
-                      checked={!availablePythonPaths.includes(pythonPath)}
-                      onChange={() => setPythonPath('')}
-                      className="accent-blue-600"
-                    />
-                    自定义
-                  </label>
-                  {!availablePythonPaths.includes(pythonPath) && (
-                    <input
-                      type="text"
-                      value={pythonPath}
-                      onChange={(e) => setPythonPath(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
-                      placeholder="Python 可执行文件路径"
-                      autoFocus
-                    />
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">脚本路径</label>
-                <input
-                  type="text"
-                  value={scriptPath}
-                  onChange={(e) => setScriptPath(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  placeholder="dashboard_service.py"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">模型类型</label>
-                <select
-                  value={modelType}
-                  onChange={(e) => {
-                    const nextModel = e.target.value as 'bcic2a' | 'hgd'
-                    setModelType(nextModel)
-                    setLaunchChannels([...modelChannels[nextModel]])
-                  }}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
-                >
-                  <option value="bcic2a">BCIC2A</option>
-                  <option value="hgd">HGD</option>
-                </select>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-gray-400">EEG 通道（多选）</label>
-                  <button
-                    type="button"
-                    onClick={() => setLaunchChannels(
-                      launchChannels.length === modelChannels[modelType].length
-                        ? []
-                        : [...modelChannels[modelType]],
-                    )}
-                    className="text-[10px] text-blue-600 hover:text-blue-700"
-                  >
-                    {launchChannels.length === modelChannels[modelType].length ? '清空' : '全选'}
-                  </button>
-                </div>
-                <div className="grid grid-cols-4 gap-x-2 gap-y-1 max-h-28 overflow-y-auto rounded-lg border border-gray-200 p-2.5">
-                  {modelChannels[modelType].map((channel) => (
-                    <label key={channel} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={launchChannels.includes(channel)}
-                        onChange={() => setLaunchChannels((current) =>
-                          current.includes(channel)
-                            ? current.filter((item) => item !== channel)
-                            : modelChannels[modelType].filter((item) =>
-                                item === channel || current.includes(item),
-                              ),
-                        )}
-                        className="accent-blue-600"
-                      />
-                      {channel}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">EEG 信号源</label>
-                <select
-                  value={eegSource}
-                  onChange={(e) => setEegSource(e.target.value as 'neuracle' | 'local')}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
-                >
-                  <option value="neuracle">博睿康采集软件 (TCP)</option>
-                  <option value="local">本地 EEG 数据</option>
-                </select>
-              </div>
-              {eegSource === 'local' && (
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">本地 BDF 文件路径</label>
-                  <input
-                    type="text"
-                    value={localEegFile}
-                    onChange={(e) => setLocalEegFile(e.target.value)}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                    placeholder="path/to/data.bdf"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={startService}
-                disabled={serviceRunning}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
-              >
-                启动服务
-              </button>
+          {serviceCollapsed ? (
+            <div className="p-4 flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-50 border-emerald-200 text-emerald-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                运行中
+              </span>
               <button
                 onClick={stopService}
-                disabled={!serviceRunning}
-                className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 停止服务
               </button>
-              {launchMessage && <span className="text-xs text-gray-500 ml-2">{launchMessage}</span>}
             </div>
-          </div>
+          ) : (
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">Python 路径（单选）</label>
+                  <div className="space-y-1.5 rounded-lg border border-gray-200 p-2.5">
+                    {availablePythonPaths.map((path) => (
+                      <label key={path} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="python-path"
+                          checked={pythonPath === path}
+                          onChange={() => setPythonPath(path)}
+                          className="accent-blue-600"
+                        />
+                        <span className="truncate" title={path}>{path === 'python' ? '系统 PATH (python)' : path}</span>
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="python-path"
+                        checked={!availablePythonPaths.includes(pythonPath)}
+                        onChange={() => setPythonPath('')}
+                        className="accent-blue-600"
+                      />
+                      自定义
+                    </label>
+                    {!availablePythonPaths.includes(pythonPath) && (
+                      <input
+                        type="text"
+                        value={pythonPath}
+                        onChange={(e) => setPythonPath(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                        placeholder="Python 可执行文件路径"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">脚本路径</label>
+                  <input
+                    type="text"
+                    value={scriptPath}
+                    onChange={(e) => setScriptPath(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                    placeholder="dashboard_service.py"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">模型类型</label>
+                  <select
+                    value={modelType}
+                    onChange={(e) => {
+                      const nextModel = e.target.value as 'bcic2a' | 'hgd'
+                      setModelType(nextModel)
+                      setLaunchChannels([...modelChannels[nextModel]])
+                    }}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                  >
+                    <option value="bcic2a">BCIC2A</option>
+                    <option value="hgd">HGD</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] uppercase tracking-wider text-gray-400">EEG 通道（多选）</label>
+                    <button
+                      type="button"
+                      onClick={() => setLaunchChannels(
+                        launchChannels.length === modelChannels[modelType].length
+                          ? []
+                          : [...modelChannels[modelType]],
+                      )}
+                      className="text-[10px] text-blue-600 hover:text-blue-700"
+                    >
+                      {launchChannels.length === modelChannels[modelType].length ? '清空' : '全选'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-x-2 gap-y-1 max-h-28 overflow-y-auto rounded-lg border border-gray-200 p-2.5">
+                    {modelChannels[modelType].map((channel) => (
+                      <label key={channel} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={launchChannels.includes(channel)}
+                          onChange={() => setLaunchChannels((current) =>
+                            current.includes(channel)
+                              ? current.filter((item) => item !== channel)
+                              : modelChannels[modelType].filter((item) =>
+                                  item === channel || current.includes(item),
+                                ),
+                          )}
+                          className="accent-blue-600"
+                        />
+                        {channel}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">EEG 信号源</label>
+                  <select
+                    value={eegSource}
+                    onChange={(e) => setEegSource(e.target.value as 'neuracle' | 'local')}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                  >
+                    <option value="neuracle">博睿康采集软件 (TCP)</option>
+                    <option value="local">本地 EEG 数据</option>
+                  </select>
+                </div>
+                {eegSource === 'local' && (
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">本地 BDF 文件路径</label>
+                    <input
+                      type="text"
+                      value={localEegFile}
+                      onChange={(e) => setLocalEegFile(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                      placeholder="path/to/data.bdf"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={startService}
+                  disabled={serviceRunning}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+                >
+                  启动服务
+                </button>
+                <button
+                  onClick={stopService}
+                  disabled={!serviceRunning}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                >
+                  停止服务
+                </button>
+                {launchMessage && <span className="text-xs text-gray-500 ml-2">{launchMessage}</span>}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Game Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <SectionTitle eyebrow="LAUNCH" title="赛车游戏 Demo" meta={gameRunning ? '运行中' : '已停止'} />
-          <div className="p-4 space-y-3">
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">游戏可执行文件路径</label>
-              <input
-                type="text"
-                value={gamePath}
-                onChange={(e) => setGamePath(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                placeholder="path/to/game.exe"
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={startGame}
-                disabled={gameRunning}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
-              >
-                启动游戏
-              </button>
+          {gameCollapsed ? (
+            <div className="p-4 flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-50 border-emerald-200 text-emerald-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                运行中
+              </span>
               <button
                 onClick={stopGame}
-                disabled={!gameRunning}
-                className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 停止游戏
               </button>
             </div>
-          </div>
+          ) : (
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">游戏可执行文件路径</label>
+                <input
+                  type="text"
+                  value={gamePath}
+                  onChange={(e) => setGamePath(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="path/to/game.exe"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={startGame}
+                  disabled={gameRunning}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+                >
+                  启动游戏
+                </button>
+                <button
+                  onClick={stopGame}
+                  disabled={!gameRunning}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                >
+                  停止游戏
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
