@@ -317,7 +317,7 @@ class InferenceRuntime:
         if time.time() - self._last_inference_at > max(3.0, self.args.step_sec * 4):
             return {"level": "yellow", "message": "等待有效 EEG 推理窗口"}
         if not lsl_online:
-            return {"level": "yellow", "message": "LSL consumer 尚未发现"}
+            return {"level": "yellow", "message": "LSL Receiver 尚未发现"}
         return {"level": "green", "message": "脑电-模型-LSL 链路运行中"}
 
     def _dry_run(self) -> None:

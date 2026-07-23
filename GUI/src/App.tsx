@@ -8,8 +8,7 @@ const statusLabels: Record<string, string> = {
   device_tcp: 'EEG TCP',
   inference: '模型推理',
   lsl_outlet: 'LSL 输出',
-  lsl_consumer: 'LSL 消费者',
-  game_process: '游戏进程',
+  lsl_consumer: 'LSL Receiver'
 }
 
 const controlGlyphs = ['←', '→', '↑', '■']
@@ -264,11 +263,8 @@ function App() {
             ◎
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 font-medium">
-              HCI LAB / LIVE INSTRUMENTATION
-            </div>
             <h1 className="text-xl font-semibold text-gray-900 tracking-tight">
-              BCI Racing <em className="text-blue-600 not-italic font-light">Control Room</em>
+              Fly Drive
             </h1>
           </div>
         </div>
@@ -628,7 +624,7 @@ function App() {
             </div>
             <div>
               <span className="text-[10px] uppercase tracking-[0.18em] text-gray-400 font-medium">
-                CURRENT COMMAND
+                控制命令
               </span>
               <h3 className="text-xl font-semibold text-blue-600 mt-1 tracking-wide">
                 {model.control_name ? model.control_name.toUpperCase() : 'WAITING'}
