@@ -1,0 +1,14 @@
+.venv/
+.vscode
+__pycache__/
+*.pyc
+experiment_logs
+*.py[cod]
+
+GUI/node_modules/
+GUI/dist/
+GUI/src-tauri/target/
+GUI/*.log
+
+.pytest_cache/
+.mypy_cache/
