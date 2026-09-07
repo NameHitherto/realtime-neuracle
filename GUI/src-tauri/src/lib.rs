@@ -33,6 +33,7 @@ pub fn run() {
             get_events,
             get_history,
             send_manual_control,
+            get_default_launch_paths,
             start_python_service,
             check_python_exists,
             stop_python_service,

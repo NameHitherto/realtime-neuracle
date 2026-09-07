@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from telemetry_core import TelemetryBus
 
 ROOT = Path(__file__).resolve().parent
-DIST = ROOT / "dashboard" / "dist"
+DIST = ROOT / "GUI" / "dist"
 
 
 class ManualControl(BaseModel):
@@ -22,7 +22,11 @@ class ManualControl(BaseModel):
     duration_ms: int = Field(default=1000, ge=100, le=10000)
 
 
-def create_app(bus: TelemetryBus, runtime: Any) -> FastAPI:
+def create_app(
+    bus: TelemetryBus,
+    runtime: Any,
+    request_server_shutdown: Callable[[], None] | None = None,
+) -> FastAPI:
     app = FastAPI(title="BCI Racing Telemetry", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -37,7 +41,7 @@ def create_app(bus: TelemetryBus, runtime: Any) -> FastAPI:
         snapshot = bus.snapshot()
         inference = snapshot.get("status", {}).get("inference")
         return {
-            "ok": inference in {"running", "dry-run"},
+            "ok": inference in {"starting", "running", "calibrating", "waiting", "dry-run"},
             "telemetry": snapshot.get("health", {}),
             "status": snapshot.get("status", {}),
         }
@@ -61,6 +65,15 @@ def create_app(bus: TelemetryBus, runtime: Any) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return bus.snapshot()
+
+    @app.post("/api/runtime/stop")
+    def stop_runtime() -> dict[str, Any]:
+        """Stop acquisition, flush logs, and ask Uvicorn to release port 8000."""
+        runtime.stop()
+        snapshot = bus.snapshot()
+        if request_server_shutdown is not None:
+            request_server_shutdown()
+        return snapshot
 
     @app.websocket("/ws/telemetry")
     async def telemetry_socket(websocket: WebSocket) -> None:

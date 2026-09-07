@@ -13,34 +13,45 @@ const statusLabels: Record<string, string> = {
 
 const controlGlyphs = ['←', '→', '↑', '■']
 
-const modelChannels = {
-  bcic2a: [
-    'Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4',
-    'C6', 'CP3', 'CP1', 'CPz', 'CP2', 'CP4', 'P1', 'Pz', 'P2', 'POz', 'TRG',
-  ],
-  hgd: [
-    'FC5', 'FC1', 'FC2', 'FC6', 'C3', 'C4', 'CP5', 'CP1', 'CP2', 'CP6', 'FC3',
-    'FCz', 'FC4', 'C5', 'C1', 'C2', 'C6', 'CP3', 'CPz', 'CP4', 'FFC5h', 'FFC3h',
-    'FFC4h', 'FFC6h', 'FCC5h', 'FCC3h', 'FCC4h', 'FCC6h', 'CCP5h', 'CCP3h',
-    'CCP4h', 'CCP6h', 'CPP5h', 'CPP3h', 'CPP4h', 'CPP6h', 'FFC1h', 'FFC2h',
-    'FCC1h', 'FCC2h', 'CCP1h', 'CCP2h', 'CPP1h', 'CPP2h', 'TRG',
-  ],
-} as const
+const actionLabels: Record<string, string> = {
+  left: 'LEFT',
+  right: 'RIGHT',
+  forward: 'FORWARD',
+  accelerate: 'SPEED UP',
+  stop: 'STOP',
+}
 
-const pythonCandidates = [
-  'python',
-  'C:\\Python312\\python.exe',
-  'C:\\Python311\\python.exe',
-  'C:\\Python310\\python.exe',
-  'C:\\Program Files\\Python312\\python.exe',
-  'C:\\Program Files\\Python311\\python.exe',
-  'E:\\Anaconda\\python.exe',
-  'C:\\Users\\namehitherto\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
-]
+const neusenW64StreamChannels = [
+  'Fpz', 'Fp1', 'Fp2', 'AF3', 'AF4', 'AF7', 'AF8',
+  'Fz', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8',
+  'FCz', 'FC1', 'FC2', 'FC3', 'FC4', 'FC5', 'FC6', 'FT7', 'FT8',
+  'Cz', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'T7', 'T8',
+  'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'TP7', 'TP8',
+  'Pz', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8',
+  'POz', 'PO3', 'PO4', 'PO5', 'PO6', 'PO7', 'PO8',
+  'Oz', 'O1', 'O2', 'ECG', 'HEOR', 'HEOL', 'VEOU', 'VEOL', 'TRG',
+] as const
+
+type DefaultLaunchPaths = {
+  python_path: string
+  script_path: string
+  game_path: string
+}
+
+const emptyChannels: string[] = []
+
+function displayProjectRelativePath(value?: string): string {
+  if (!value) return ''
+  const normalized = value.replaceAll('\\', '/')
+  const marker = '/experiment_logs/'
+  const markerIndex = normalized.toLowerCase().indexOf(marker)
+  if (markerIndex < 0) return value
+  return normalized.slice(markerIndex + 1).replaceAll('/', '\\')
+}
 
 function StatusChip({ name, value }: { name: string; value?: StatusValue }) {
   const good = value === 'connected' || value === 'running'
-  const bad = value === 'error' || value === 'stopped' || value === 'unavailable'
+  const bad = value === 'error' || value === 'stale' || value === 'reconnecting' || value === 'stopped' || value === 'unavailable'
   const dotColor = good
     ? 'bg-emerald-500'
     : bad
@@ -141,14 +152,16 @@ function App() {
   const status = telemetry.status ?? {}
   const model = telemetry.model ?? {}
   const healthLevel = telemetry.health?.level ?? 'yellow'
-  const command = typeof model.control === 'number' ? model.control : 3
+  const inferenceActive = status.inference === 'running'
+  const serviceActive = ['starting', 'waiting', 'calibrating', 'running', 'reconnecting'].includes(
+    status.inference ?? '',
+  )
+  const command = inferenceActive && typeof model.control === 'number' ? model.control : 3
+  const activeActionName = model.action_name ?? model.control_name ?? ''
 
   // Service launch states
-  const [pythonPath, setPythonPath] = useState('python')
-  const [availablePythonPaths, setAvailablePythonPaths] = useState<string[]>(['python'])
-  const [scriptPath, setScriptPath] = useState('../dashboard_service.py')
-  const [modelType, setModelType] = useState<'bcic2a' | 'hgd'>('bcic2a')
-  const [launchChannels, setLaunchChannels] = useState<string[]>([...modelChannels.bcic2a])
+  const [pythonPath, setPythonPath] = useState('')
+  const [scriptPath, setScriptPath] = useState('')
   const [eegSource, setEegSource] = useState<'neuracle' | 'local'>('neuracle')
   const [localEegFile, setLocalEegFile] = useState('')
   const [serviceRunning, setServiceRunning] = useState(false)
@@ -163,22 +176,38 @@ function App() {
   const [singleChannel, setSingleChannel] = useState<string | null>(null)
   const [zoomRange, setZoomRange] = useState<[number, number] | undefined>(undefined)
 
-  const availableChannels = telemetry.eeg?.channels ?? []
+  const availableChannels = telemetry.eeg?.channels ?? emptyChannels
+  const recordingDisplayPath = displayProjectRelativePath(telemetry.recording?.session_dir)
 
   useEffect(() => {
-    if (availableChannels.length > 0 && selectedChannels.length === 0) {
-      setSelectedChannels(availableChannels)
-    }
+    setServiceRunning(serviceActive)
+    if (!serviceActive) setServiceCollapsed(false)
+  }, [serviceActive])
+
+  useEffect(() => {
+    if (availableChannels.length === 0) return
+    setSelectedChannels((previous) => {
+      const retained = previous.filter((channel) => availableChannels.includes(channel))
+      if (retained.length === previous.length) return previous
+      return retained.length > 0 ? retained : availableChannels
+    })
+    setSingleChannel((previous) =>
+      previous && availableChannels.includes(previous) ? previous : null,
+    )
   }, [availableChannels])
 
   useEffect(() => {
-    Promise.all(
-      pythonCandidates.slice(1).map(async (path) =>
-        (await invoke<boolean>('check_python_exists', { path }).catch(() => false)) ? path : null,
-      ),
-    ).then((paths) => {
-      setAvailablePythonPaths(['python', ...paths.filter((path): path is string => path !== null)])
-    })
+    if (!('__TAURI_INTERNALS__' in window)) {
+      setLaunchMessage('浏览器只读模式：请使用 Tauri GUI 启停服务和游戏')
+      return
+    }
+    invoke<DefaultLaunchPaths>('get_default_launch_paths')
+      .then((paths) => {
+        setPythonPath(paths.python_path)
+        setScriptPath(paths.script_path)
+        setGamePath(paths.game_path)
+      })
+      .catch((error) => setLaunchMessage(`默认路径解析失败: ${String(error)}`))
   }, [])
 
   const showMessage = (msg: string) => {
@@ -191,19 +220,23 @@ function App() {
       showMessage('请先选择 Python 解释器')
       return
     }
-    if (launchChannels.length === 0) {
-      showMessage('请至少选择一个 EEG 通道')
-      return
-    }
     if (eegSource === 'local' && !localEegFile.trim()) {
       showMessage('请选择本地 BDF 文件')
       return
     }
     try {
-      const args: string[] = ['--model', modelType]
-      if (launchChannels.length > 0) {
-        args.push('--channel-list', launchChannels.join(','))
-      }
+      const args: string[] = [
+        '--model',
+        'yhc',
+        '--channel-list',
+        neusenW64StreamChannels.join(','),
+        '--live-baseline-sec',
+        '30',
+        '--min-confidence',
+        '0.55',
+        '--save-logs',
+        '--auto-reconnect',
+      ]
       if (eegSource === 'local') {
         args.push('--eeg-source', 'local', '--local-eeg-file', localEegFile)
       } else {
@@ -317,44 +350,17 @@ function App() {
             <div className="p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">Python 路径（单选）</label>
-                  <div className="space-y-1.5 rounded-lg border border-gray-200 p-2.5">
-                    {availablePythonPaths.map((path) => (
-                      <label key={path} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="python-path"
-                          checked={pythonPath === path}
-                          onChange={() => setPythonPath(path)}
-                          className="accent-blue-600"
-                        />
-                        <span className="truncate" title={path}>{path === 'python' ? '系统 PATH (python)' : path}</span>
-                      </label>
-                    ))}
-                    <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="python-path"
-                        checked={!availablePythonPaths.includes(pythonPath)}
-                        onChange={() => setPythonPath('')}
-                        className="accent-blue-600"
-                      />
-                      自定义
-                    </label>
-                    {!availablePythonPaths.includes(pythonPath) && (
-                      <input
-                        type="text"
-                        value={pythonPath}
-                        onChange={(e) => setPythonPath(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
-                        placeholder="Python 可执行文件路径"
-                        autoFocus
-                      />
-                    )}
-                  </div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">项目 Python 环境（相对项目目录）</label>
+                  <input
+                    type="text"
+                    value={pythonPath}
+                    onChange={(e) => setPythonPath(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                    placeholder=".venv/Scripts/python.exe"
+                  />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">脚本路径</label>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">脚本路径（相对项目目录）</label>
                   <input
                     type="text"
                     value={scriptPath}
@@ -367,52 +373,18 @@ function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">模型类型</label>
-                  <select
-                    value={modelType}
-                    onChange={(e) => {
-                      const nextModel = e.target.value as 'bcic2a' | 'hgd'
-                      setModelType(nextModel)
-                      setLaunchChannels([...modelChannels[nextModel]])
-                    }}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
-                  >
-                    <option value="bcic2a">BCIC2A</option>
-                    <option value="hgd">HGD</option>
-                  </select>
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                    <strong className="block text-sm font-medium text-blue-700">YHC（固定）</strong>
+                    <span className="block text-[10px] text-blue-600 mt-0.5">四分类 · 4 秒窗口 · 0.5 秒更新</span>
+                  </div>
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[10px] uppercase tracking-wider text-gray-400">EEG 通道（多选）</label>
-                    <button
-                      type="button"
-                      onClick={() => setLaunchChannels(
-                        launchChannels.length === modelChannels[modelType].length
-                          ? []
-                          : [...modelChannels[modelType]],
-                      )}
-                      className="text-[10px] text-blue-600 hover:text-blue-700"
-                    >
-                      {launchChannels.length === modelChannels[modelType].length ? '清空' : '全选'}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-x-2 gap-y-1 max-h-28 overflow-y-auto rounded-lg border border-gray-200 p-2.5">
-                    {modelChannels[modelType].map((channel) => (
-                      <label key={channel} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={launchChannels.includes(channel)}
-                          onChange={() => setLaunchChannels((current) =>
-                            current.includes(channel)
-                              ? current.filter((item) => item !== channel)
-                              : modelChannels[modelType].filter((item) =>
-                                  item === channel || current.includes(item),
-                                ),
-                          )}
-                          className="accent-blue-600"
-                        />
-                        {channel}
-                      </label>
-                    ))}
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">TCP 数据帧</label>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <strong className="block text-sm font-medium text-emerald-700">64 EEG + TRG</strong>
+                    <span className="block text-[10px] text-emerald-600 mt-0.5">
+                      完整接收后抽取YHC感觉运动区12导联
+                    </span>
                   </div>
                 </div>
               </div>
@@ -481,13 +453,13 @@ function App() {
           ) : (
             <div className="p-4 space-y-3">
               <div>
-                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">游戏可执行文件路径</label>
+                <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">游戏可执行文件（相对项目目录）</label>
                 <input
                   type="text"
                   value={gamePath}
                   onChange={(e) => setGamePath(e.target.value)}
                   className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  placeholder="path/to/game.exe"
+                  placeholder="..\\虚拟任务竞速赛06251432\\虚拟任务竞速赛.exe"
                 />
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -516,6 +488,27 @@ function App() {
         {Object.keys(statusLabels).map((key) => (
           <StatusChip key={key} name={key} value={status[key] as StatusValue} />
         ))}
+        {telemetry.calibration?.state === 'collecting' && (
+          <div className="min-w-[220px] flex-1 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2">
+            <div className="flex justify-between text-[10px] font-medium text-amber-700">
+              <span>静息基线</span>
+              <span>{Math.max(0, telemetry.calibration.remaining_seconds ?? 0).toFixed(1)} s</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-amber-100">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    ((telemetry.calibration.received_seconds ?? 0) /
+                      Math.max(telemetry.calibration.required_seconds ?? 30, 0.1)) *
+                      100,
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
         <div
           className={`flex items-center justify-center gap-2 flex-1 min-w-[240px] px-4 py-2 rounded-lg border text-sm font-medium ${
             healthLevel === 'green'
@@ -539,7 +532,7 @@ function App() {
           <SectionTitle
             eyebrow="01 / SENSOR FEED"
             title="EEG live field"
-            meta={`${telemetry.eeg?.sample_rate ?? '—'} Hz · 2 s window`}
+            meta={`${telemetry.eeg?.sample_rate ?? '—'} Hz · ${telemetry.eeg?.source_unit ?? '—'}→µV · 2 s · TRG ${telemetry.eeg?.latest_trigger ?? '—'}`}
           />
           <div className="p-3.5">
             {/* Channel & zoom controls */}
@@ -641,7 +634,7 @@ function App() {
             <div className="flex justify-between text-[10px] text-gray-400 pt-2 border-t border-gray-100 mt-2">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse-dot" />
-                滤波后显示 · 自动缩放
+                4–38 Hz / CAR · 自动缩放
               </span>
               <span>{telemetry.eeg?.channels?.length ?? 0} channels</span>
             </div>
@@ -664,21 +657,20 @@ function App() {
                 控制命令
               </span>
               <h3 className="text-xl font-semibold text-blue-600 mt-1 tracking-wide">
-                {model.control_name ? model.control_name.toUpperCase() : 'WAITING'}
+                {inferenceActive && activeActionName
+                  ? actionLabels[activeActionName] ?? activeActionName.toUpperCase()
+                  : 'WAITING'}
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {model.prediction ?? '等待有效推理窗口'}
-              </p>
             </div>
             <div className="text-right">
               <strong className="block text-3xl font-light text-amber-500">
-                {Math.round((model.confidence ?? 0) * 100)}
+                {inferenceActive ? Math.round((model.confidence ?? 0) * 100) : 0}
                 <small className="text-lg">%</small>
               </strong>
               <span className="text-[10px] uppercase tracking-wider text-gray-400">confidence</span>
             </div>
           </div>
-          <ProbabilityChart telemetry={telemetry} />
+          <ProbabilityChart telemetry={telemetry} active={inferenceActive} />
           <div className="grid grid-cols-3 divide-x divide-gray-100 border-t border-gray-100">
             <Metric label="更新周期" value="0.5 s" detail="sliding inference" />
             <Metric label="设备" value={model.device?.toUpperCase() ?? '—'} detail="torch runtime" />
@@ -692,6 +684,19 @@ function App() {
         {/* Events Panel */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <SectionTitle eyebrow="03 / EVENT LOG" title="Trace" meta={`${events.length} recent`} />
+          {telemetry.recording?.enabled && (
+            <div className="mx-5 mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong>实验日志：{telemetry.recording.state ?? 'recording'}</strong>
+                <span>
+                  {telemetry.recording.samples_saved ?? 0} samples · {telemetry.recording.predictions_saved ?? 0} predictions
+                </span>
+              </div>
+              <div className="mt-1 truncate font-mono text-[10px]" title={recordingDisplayPath}>
+                {recordingDisplayPath}
+              </div>
+            </div>
+          )}
           <EventList events={events} />
         </div>
       </section>

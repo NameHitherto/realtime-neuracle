@@ -4,12 +4,38 @@ import socket
 import struct
 import time
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 import numpy as np
 import torch
 from scipy.signal import butter, resample_poly, sosfiltfilt
+
+
+# Exact channel order read from this machine's NeuSen W EEGCap64-V3.0 BDF
+# header (NSW3BA0064, 1000Hz64). The TCP stream must send these 64 float32
+# values in the same order, followed by one int32 trigger value per sample.
+NEUSEN_W_64_EEG_CHANNELS = [
+    "Fpz", "Fp1", "Fp2", "AF3", "AF4", "AF7", "AF8",
+    "Fz", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8",
+    "FCz", "FC1", "FC2", "FC3", "FC4", "FC5", "FC6", "FT7", "FT8",
+    "Cz", "C1", "C2", "C3", "C4", "C5", "C6", "T7", "T8",
+    "CP1", "CP2", "CP3", "CP4", "CP5", "CP6", "TP7", "TP8",
+    "Pz", "P3", "P4", "P5", "P6", "P7", "P8",
+    "POz", "PO3", "PO4", "PO5", "PO6", "PO7", "PO8",
+    "Oz", "O1", "O2", "ECG", "HEOR", "HEOL", "VEOU", "VEOL",
+]
+NEUSEN_W_64_STREAM_CHANNELS = NEUSEN_W_64_EEG_CHANNELS + ["TRG"]
+
+
+@dataclass(frozen=True)
+class DataBlock:
+    """One completely decoded block from the EEG source."""
+
+    eeg: np.ndarray
+    triggers: np.ndarray | None
+    received_at: float
 
 
 class RingBuffer:
@@ -58,12 +84,14 @@ class DataServer:
         sampling_rate: float,
         buffer_seconds: float,
         trigger_name: str = "TRG",
+        socket_timeout_seconds: float = 2.0,
     ):
         self.host = host
         self.port = int(port)
         self.channel_names = list(channel_names)
         self.sampling_rate = float(sampling_rate)
         self.trigger_name = trigger_name
+        self.socket_timeout_seconds = float(socket_timeout_seconds)
         self.has_trigger = self.channel_names[-1].upper() == trigger_name.upper()
         self.eeg_channel_names = self.channel_names[:-1] if self.has_trigger else self.channel_names
         self.n_chan_total = len(self.channel_names)
@@ -76,12 +104,13 @@ class DataServer:
         self.bytes_per_sample = struct.calcsize(self.struct_format)
         self._byte_cache = b""
         self._socket = None
+        self.last_trigger: int | None = None
 
     def __enter__(self):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._socket.settimeout(self.socket_timeout_seconds)
         self._socket.connect((self.host, self.port))
-        self._socket.settimeout(2.0)
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -93,19 +122,27 @@ class DataServer:
         if self._socket is None:
             raise RuntimeError("DataServer is not connected")
         max_samples = max_samples or max(1, int(self.sampling_rate // 10))
-        payload = self._byte_cache + self._socket.recv(self.bytes_per_sample * max_samples)
+        received = self._socket.recv(self.bytes_per_sample * max_samples)
+        if received == b"":
+            raise ConnectionError("EEG TCP peer closed the connection")
+        payload = self._byte_cache + received
         usable = len(payload) - (len(payload) % self.bytes_per_sample)
         if usable <= 0:
             self._byte_cache = payload
-            return
+            return None
         self._byte_cache = payload[usable:]
         rows = list(struct.iter_unpack(self.struct_format, payload[:usable]))
         if not rows:
-            return
-        arr = np.asarray(rows, dtype=np.float32).T
+            return None
         if self.has_trigger:
-            arr = arr[:-1]
-        self.buffer.append(arr)
+            eeg = np.asarray([row[:-1] for row in rows], dtype=np.float32).T
+            triggers = np.fromiter((int(row[-1]) for row in rows), dtype=np.int32, count=len(rows))
+            self.last_trigger = int(triggers[-1])
+        else:
+            eeg = np.asarray(rows, dtype=np.float32).T
+            triggers = None
+        self.buffer.append(eeg)
+        return DataBlock(eeg=eeg, triggers=triggers, received_at=time.time())
 
 
 class LSLControlOutlet:
@@ -165,6 +202,9 @@ class RealTimePreprocessor:
         model_samples: int,
         zscore_window: bool,
         calibration_npz: str | None = None,
+        calibration_mean: np.ndarray | None = None,
+        calibration_std: np.ndarray | None = None,
+        common_average_reference: bool = False,
     ):
         self.input_sfreq = float(input_sfreq)
         self.model_sfreq = float(model_sfreq)
@@ -173,18 +213,59 @@ class RealTimePreprocessor:
         self.high_hz = float(high_hz)
         self.model_samples = int(model_samples)
         self.zscore_window = bool(zscore_window)
+        self.common_average_reference = bool(common_average_reference)
         self.calibration_mean = None
         self.calibration_std = None
+        self.last_input_unit = "unknown"
+        self.last_unit_scale = 1.0
         if calibration_npz:
             stats = np.load(calibration_npz)
             self.calibration_mean = np.asarray(stats["mean"], dtype=np.float32).reshape(-1, 1)
             self.calibration_std = np.asarray(stats["std"], dtype=np.float32).reshape(-1, 1)
             self.calibration_std = np.maximum(self.calibration_std, 1e-6)
+        elif calibration_mean is not None and calibration_std is not None:
+            self.calibration_mean = np.asarray(calibration_mean, dtype=np.float32).reshape(-1, 1)
+            self.calibration_std = np.asarray(calibration_std, dtype=np.float32).reshape(-1, 1)
+            self.calibration_std = np.maximum(self.calibration_std, 1e-6)
+
+    def _prepare_signal(self, x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x, dtype=np.float32)
+        x = self._maybe_to_microvolts(x)
+        if self.common_average_reference:
+            x = x - x.mean(axis=0, keepdims=True)
+        x = self._bandpass(x, self.input_sfreq)
+        x = self._resample(x)
+        return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+    def prepare_for_display(self, x: np.ndarray) -> np.ndarray:
+        """Return filtered, resampled microvolt data without normalization."""
+
+        return self._prepare_signal(x)
+
+    def fit_calibration(self, baseline: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Fit per-channel statistics from a continuous resting baseline."""
+
+        prepared = self._prepare_signal(baseline)
+        if prepared.ndim != 2 or prepared.shape[-1] < 2:
+            raise ValueError(f"Invalid calibration shape: {prepared.shape}")
+        mean = prepared.mean(axis=-1, keepdims=True).astype(np.float32)
+        std = np.maximum(prepared.std(axis=-1, keepdims=True), 1e-6).astype(np.float32)
+        self.calibration_mean = mean
+        self.calibration_std = std
+        return mean[:, 0].copy(), std[:, 0].copy()
 
     def _maybe_to_microvolts(self, x: np.ndarray) -> np.ndarray:
         median_abs = float(np.nanmedian(np.abs(x)))
         if median_abs < 1e-3:
+            self.last_input_unit = "V"
+            self.last_unit_scale = 1_000_000.0
             return x * 1_000_000.0
+        if median_abs > 1_000.0:
+            self.last_input_unit = "nV"
+            self.last_unit_scale = 0.001
+            return x * 0.001
+        self.last_input_unit = "uV"
+        self.last_unit_scale = 1.0
         return x
 
     def _bandpass(self, x: np.ndarray, sfreq: float) -> np.ndarray:
@@ -212,6 +293,11 @@ class RealTimePreprocessor:
 
     def _standardize(self, x: np.ndarray) -> np.ndarray:
         if self.calibration_mean is not None:
+            if self.calibration_mean.shape[0] != x.shape[0]:
+                raise ValueError(
+                    "Calibration channel count does not match the realtime window: "
+                    f"{self.calibration_mean.shape[0]} != {x.shape[0]}"
+                )
             return (x - self.calibration_mean) / self.calibration_std
         if self.zscore_window:
             mean = x.mean(axis=-1, keepdims=True)
@@ -220,10 +306,7 @@ class RealTimePreprocessor:
         return x
 
     def transform(self, x: np.ndarray) -> np.ndarray:
-        x = np.asarray(x, dtype=np.float32)
-        x = self._maybe_to_microvolts(x)
-        x = self._bandpass(x, self.input_sfreq)
-        x = self._resample(x)
+        x = self._prepare_signal(x)
         x = self._fix_length(x)
         x = self._standardize(x)
         return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
@@ -282,13 +365,31 @@ def predict_window(
     device: torch.device,
     prob_smoother: deque[np.ndarray],
 ) -> tuple[int, float, np.ndarray]:
+    pred, confidence, _, smooth_probs = predict_window_details(
+        model,
+        window,
+        device,
+        prob_smoother,
+    )
+    return pred, confidence, smooth_probs
+
+
+@torch.no_grad()
+def predict_window_details(
+    model: torch.nn.Module,
+    window: np.ndarray,
+    device: torch.device,
+    prob_smoother: deque[np.ndarray],
+) -> tuple[int, float, np.ndarray, np.ndarray]:
+    """Return both the current-window and smoothed class probabilities."""
+
     tensor = torch.from_numpy(window[None]).float().to(device)
     logits = model(tensor)
-    probs = torch.softmax(logits, dim=1).detach().cpu().numpy()[0]
-    prob_smoother.append(probs)
+    raw_probs = torch.softmax(logits, dim=1).detach().cpu().numpy()[0]
+    prob_smoother.append(raw_probs)
     smooth_probs = np.mean(np.stack(list(prob_smoother), axis=0), axis=0)
     pred = int(np.argmax(smooth_probs))
-    return pred, float(smooth_probs[pred]), smooth_probs
+    return pred, float(smooth_probs[pred]), raw_probs, smooth_probs
 
 
 def add_common_args(parser: argparse.ArgumentParser, default_checkpoint: Path, default_channels: list[str]):

@@ -75,9 +75,4 @@ impl TelemetryClient {
             }
         });
     }
-
-    pub async fn stop(&self) {
-        let mut running = self.running.write().await;
-        *running = false;
-    }
 }

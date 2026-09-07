@@ -1,32 +1,26 @@
-# React + TypeScript + Vite
+# BCI Racing Control Room
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+这是 YHC 实时脑电赛车系统的 React + TypeScript + Tauri 桌面界面。必须通过 Tauri 启动，直接打开 Vite 网页无法调用本地 Python/游戏进程命令。
 
-Currently, two official plugins are available:
+从项目根目录启动：
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+.\05_run_gui.ps1
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+或在本目录启动开发模式：
+
+```powershell
+npm install
+npm run tauri dev
+```
+
+检查和构建：
+
+```powershell
+npm run lint
+npm run build
+cargo check --manifest-path .\src-tauri\Cargo.toml
+```
+
+GUI 固定使用 YHC 模型，并通过 Rust 后端启动项目 `.venv` 中的 Python 服务和相邻目录的 Unity 游戏。遥测由 Python FastAPI WebSocket 发送到 Rust，再作为 Tauri 事件推送给 React。

@@ -1,0 +1,142 @@
+{
+  "folds": [
+    {
+      "run_name": "yhc_hyena_test_session_01",
+      "seed": 20260808,
+      "best_epoch": 1,
+      "best_validation": {
+        "loss": 1.3343060811360676,
+        "window_acc": 0.3263888888888889,
+        "window_kappa": 0.10185185185185186,
+        "trial_acc": 0.3888888888888889,
+        "trial_kappa": 0.18518518518518523,
+        "n_windows": 144,
+        "n_trials": 36
+      },
+      "test": {
+        "loss": 1.3898366689682007,
+        "window_acc": 0.25,
+        "window_kappa": 0.0,
+        "trial_acc": 0.25,
+        "trial_kappa": 0.0,
+        "n_windows": 240,
+        "n_trials": 60
+      },
+      "fit_sessions": [
+        2,
+        3,
+        4
+      ],
+      "test_sessions": [
+        1
+      ],
+      "elapsed_seconds": 4.966494560241699,
+      "checkpoint": "E:\\运动想象算法\\yhc20260807_hyena\\results\\cross_session_smoke_test\\yhc_hyena_test_session_01.pth"
+    },
+    {
+      "run_name": "yhc_hyena_test_session_02",
+      "seed": 20260809,
+      "best_epoch": 1,
+      "best_validation": {
+        "loss": 1.3420259820090399,
+        "window_acc": 0.2916666666666667,
+        "window_kappa": 0.05555555555555558,
+        "trial_acc": 0.3055555555555556,
+        "trial_kappa": 0.07407407407407407,
+        "n_windows": 144,
+        "n_trials": 36
+      },
+      "test": {
+        "loss": 1.2315114259719848,
+        "window_acc": 0.275,
+        "window_kappa": 0.033333333333333326,
+        "trial_acc": 0.2833333333333333,
+        "trial_kappa": 0.0444444444444444,
+        "n_windows": 240,
+        "n_trials": 60
+      },
+      "fit_sessions": [
+        1,
+        3,
+        4
+      ],
+      "test_sessions": [
+        2
+      ],
+      "elapsed_seconds": 3.4034626483917236,
+      "checkpoint": "E:\\运动想象算法\\yhc20260807_hyena\\results\\cross_session_smoke_test\\yhc_hyena_test_session_02.pth"
+    },
+    {
+      "run_name": "yhc_hyena_test_session_03",
+      "seed": 20260810,
+      "best_epoch": 1,
+      "best_validation": {
+        "loss": 1.3336705366770427,
+        "window_acc": 0.3541666666666667,
+        "window_kappa": 0.13888888888888884,
+        "trial_acc": 0.3611111111111111,
+        "trial_kappa": 0.14814814814814814,
+        "n_windows": 144,
+        "n_trials": 36
+      },
+      "test": {
+        "loss": 1.2483461300532024,
+        "window_acc": 0.3333333333333333,
+        "window_kappa": 0.11111111111111116,
+        "trial_acc": 0.35,
+        "trial_kappa": 0.1333333333333333,
+        "n_windows": 240,
+        "n_trials": 60
+      },
+      "fit_sessions": [
+        1,
+        2,
+        4
+      ],
+      "test_sessions": [
+        3
+      ],
+      "elapsed_seconds": 3.395925283432007,
+      "checkpoint": "E:\\运动想象算法\\yhc20260807_hyena\\results\\cross_session_smoke_test\\yhc_hyena_test_session_03.pth"
+    },
+    {
+      "run_name": "yhc_hyena_test_session_04",
+      "seed": 20260811,
+      "best_epoch": 1,
+      "best_validation": {
+        "loss": 1.3718056148952908,
+        "window_acc": 0.3263888888888889,
+        "window_kappa": 0.10185185185185186,
+        "trial_acc": 0.3333333333333333,
+        "trial_kappa": 0.11111111111111116,
+        "n_windows": 144,
+        "n_trials": 36
+      },
+      "test": {
+        "loss": 1.2338313023249308,
+        "window_acc": 0.275,
+        "window_kappa": 0.033333333333333326,
+        "trial_acc": 0.2833333333333333,
+        "trial_kappa": 0.0444444444444444,
+        "n_windows": 240,
+        "n_trials": 60
+      },
+      "fit_sessions": [
+        1,
+        2,
+        3
+      ],
+      "test_sessions": [
+        4
+      ],
+      "elapsed_seconds": 3.356745481491089,
+      "checkpoint": "E:\\运动想象算法\\yhc20260807_hyena\\results\\cross_session_smoke_test\\yhc_hyena_test_session_04.pth"
+    }
+  ],
+  "mean": {
+    "window_acc": 0.2833333333333333,
+    "window_kappa": 0.04444444444444445,
+    "trial_acc": 0.29166666666666663,
+    "trial_kappa": 0.055555555555555525
+  }
+}

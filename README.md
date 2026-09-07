@@ -1,65 +1,91 @@
-# realtime博睿康
+# YHC 实时脑电赛车系统
 
-这个目录放的是两个已经训练好的单被试 4 分类模型，以及博睿康/Neuracle TCP 实时推理脚本。
+本目录是面向 YHC 单被试模型的完整实时系统：接收 NeuSen W/Neuracle TCP 脑电流，在 GUI 中显示 12 导脑电、四分类概率、当前分类、游戏控制和运行事件，并通过 LSL 实时控制 `虚拟任务竞速赛`。
 
-- `realtime_bcic2a_4class.py`: 调用 BCIC2a 当前最佳平均模型，使用 S03 checkpoint，类别为 `feet / left_hand / right_hand / tongue`。
-- `realtime_hgd_4class.py`: 调用 HGD 当前最佳平均模型，使用 S003 checkpoint，类别为 `feet / left_hand / rest / right_hand`。
-- `realtime_common.py`: 从 `demo04_original.py` 改造出的 TCP 接收、环形缓冲、滑动窗口、滤波、重采样、标准化和概率平滑代码。
+## 固定实验契约
 
-运行前必须保证博睿康发送端的通道顺序与脚本中的模型通道顺序一致。原始 `demo 04.py` 默认只有 10 个枕区通道，不能直接喂给 MI 模型；BCIC2a 模型需要 22 个导联，HGD 模型需要 44 个导联。
+- 设备流：1000 Hz，64 个 `float32` EEG + 1 个 `int32` TRG，共 65 字段。
+- 模型导联：`FC3、FC1、FCz、FC2、FC4、C3、C1、Cz、C2、C4、CP3、CP4`。
+- 模型输入：4 秒，降采样至 250 Hz，形状 `12 × 1000`。
+- 预处理：自动 V/µV 量纲识别、12 导 CAR、4–38 Hz 带通、重采样、按通道基线标准化。
+- 类别：`rest、feet、left_hand、right_hand`。
+- 游戏协议：`0=左、1=右、2=油门（前进/加速）、3=制动/安全停止`。
+- 输出：LSL `EEGback|EEG`，单通道 `float32`，10 Hz。
 
-## 先做离线自检
+训练阶段每个 Trial 的四个 4 秒窗口相对 Trial 起点为 `3.0、3.5、4.0、4.5 s`。赛车部署采用等价的 4 秒滚动窗口，每 0.5 秒更新一次，从而持续输出控制，而不是等待离散 Trial 触发。
 
-```powershell
-cd "E:\运动想象算法\realtime博睿康"
-python .\realtime_bcic2a_4class.py --dry-run
-python .\realtime_hgd_4class.py --dry-run
-```
+## 第一次使用
 
-## 实时运行
-
-```powershell
-cd "E:\运动想象算法\realtime博睿康"
-python .\realtime_bcic2a_4class.py --host 127.0.0.1 --port 8712 --device-sfreq 1000 --step-sec 0.5
-python .\realtime_hgd_4class.py --host 127.0.0.1 --port 8712 --device-sfreq 1000 --step-sec 0.5
-```
-
-## 接入赛车游戏
-
-赛车游戏读取的是 LSL 单通道控制流，和 `bci_接入游戏_original.py` 保持一致：
-
-- stream name: `EEGback`
-- stream type: `EEG`
-- channel count: `1`
-- sample format: `float32`
-- value mapping: `0=left`, `1=right`, `2=forward`, `3=stop`
-
-模型类别到赛车控制的映射：
-
-- BCIC2a: `left_hand -> 0`, `right_hand -> 1`, `feet -> 2`, `tongue -> 3`
-- HGD: `left_hand -> 0`, `right_hand -> 1`, `feet -> 2`, `rest -> 3`
-
-运行前需要安装 `pylsl`：
+在 PowerShell 中执行：
 
 ```powershell
-conda activate pt310
-pip install pylsl
+.\00_setup_environment.ps1
+.\.venv\Scripts\python.exe .\01_check_environment.py
 ```
 
-然后运行其中一个实时控制脚本：
+安装脚本会自动查找本机的 Python 3.10（包括已有 Conda 环境），创建项目独立的 `.venv`，按 `requirements_realtime.lock.txt` 安装 Python 依赖，并安装、构建和检查 React/Tauri GUI。它不会激活或修改 Conda 环境。本机验证组合为 Python 3.10、NumPy 1.26.4、PyTorch 2.4.0；默认 PyTorch 包使用 CPU，足以运行当前实时推理。若只需安装 Python，可使用 `-SkipGui`；若暂时跳过构建检查，可使用 `-SkipChecks`。
+
+项目已固定使用 `.venv` 解释器，并关闭终端自动环境激活，因此打开新终端时不会再执行 `conda-hook.ps1` 或 `conda activate base`。首次修改配置后，请关闭旧终端并新建一个终端使设置生效。
+
+## 正式实时实验
+
+1. 佩戴设备并确认阻抗、参考和地线正常。
+2. 在博睿康采集软件中确认发送顺序与 `configs/neusen_w_64_channels_template.txt` 完全一致，开启 `127.0.0.1:8712` Data Sending。
+3. 先验证实际 TCP 帧宽：
+
+   ```powershell
+   .\.venv\Scripts\python.exe .\02_check_yhc_neuracle_stream.py
+   ```
+
+   只有检查显示 `PASSED` 才能继续。
+
+4. 启动 GUI：
+
+   ```powershell
+   .\05_run_gui.ps1
+   ```
+
+5. GUI 会自动填入本项目 `.venv`、`dashboard_service.py` 和游戏路径。保持模型为固定的 YHC，点击“启动服务”。
+6. 被试保持睁眼/闭眼状态与训练基线一致，静息 30 秒。GUI 会显示倒计时和实时 12 导波形；校准结束后自动开始分类。
+7. 点击“启动游戏”。当 `EEG TCP、模型推理、LSL 输出、LSL Receiver` 状态正常时即可开始脑控。
+
+建议先用 GUI 的运行状态确认链路，再进入正式赛道。停止实验时先点击“停止游戏”，再点击“停止服务”，以确保日志完整落盘。
+
+## 运行行为
+
+- 实时波形以 5 Hz 刷新，显示最近 2 秒、4–38 Hz/CAR 后的 12 导 µV 信号。
+- 模型每 0.5 秒推理一次，最近 3 次概率取均值；置信度低于 0.55 时输出停止。
+- 分类动作：`left_hand=左转、right_hand=右转、feet=前进、rest=加速`。游戏中的前进与加速共用控制码 `2`，GUI 按模型类别分别显示；控制码 `3` 仅用于低置信度、断流或停止服务时的安全停车。
+- 30 秒实时基线会覆盖 checkpoint 中的历史基线统计；如使用命令行传入 `--live-baseline-sec 0`，才会沿用 checkpoint/校准文件统计。
+- EEG 超过 2 秒无数据时立即输出停止；TCP 断开后每 2 秒自动重连。
+- 原始 64 导 EEG、TRG、预测、LSL 控制和事件写入 `experiment_logs/`。实时基线另存为 `live_calibration.npz`。
+
+## 仅启动后端
 
 ```powershell
-cd "E:\运动想象算法\realtime博睿康"
-python .\bcic2a_racing_game.py --host 127.0.0.1 --port 8712 --device-sfreq 1000 --step-sec 0.5
-python .\hgd_racing_game.py --host 127.0.0.1 --port 8712 --device-sfreq 1000 --step-sec 0.5
+.\04_run_dashboard.ps1
 ```
 
-这两个脚本会持续向游戏发送 `0/1/2/3`，名义输出频率为 10 Hz；模型每 `step-sec` 秒更新一次判断，在两次判断之间保持上一条控制值。
-
-如果博睿康发送端实际通道列表不同，用 `--channel-list` 显式传入，最后一列触发通道写成 `TRG`：
+离线模型/API 自检：
 
 ```powershell
-python .\realtime_bcic2a_4class.py --channel-list "Fz,FC3,FC1,FCz,FC2,FC4,C5,C3,C1,Cz,C2,C4,C6,CP3,CP1,CPz,CP2,CP4,P1,Pz,P2,POz,TRG"
+.\04_run_dashboard.ps1 -Cpu -DryRun
 ```
 
-HGD 模型训练时做了标准化；实时脚本默认使用窗口内 z-score。更严谨的实时部署应采集一段静息/校准数据，保存每个通道的 `mean/std` 到 `.npz`，然后通过 `--calibration-npz` 传入。
+浏览器模式使用已构建的 `GUI/dist`：
+
+```text
+http://127.0.0.1:8000
+```
+
+浏览器模式只能看遥测；启动/停止 Python 和游戏必须使用 Tauri GUI。
+
+## 实验前必须确认
+
+- TCP 实际通道顺序，而不只是通道数量。
+- 设备输出单位和波形幅值合理，无饱和、平直或大量工频噪声。
+- 游戏文件 `虚拟任务竞速赛_Data/StreamingAssets/LSLInletConfig.txt` 内容为 `EEGback|EEG`。
+- 30 秒基线期间没有运动、说话、眨眼集中爆发或电极松动。
+- GUI 中 LSL Receiver 已连接；否则游戏尚未订阅控制流。
+
+旧的 BCIC2A/HGD 文件作为历史代码保留，但 GUI 和 `dashboard_service.py` 已锁定为 YHC，不参与当前实验。

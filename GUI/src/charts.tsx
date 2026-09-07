@@ -1,8 +1,26 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as echarts from 'echarts'
 import type { Telemetry } from './types'
 
 const palette = ['#2563eb', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#06b6d4', '#ec4899']
+const emptyValues: number[][] = []
+const emptyChannels: string[] = []
+const emptyProbabilities: number[] = []
+
+const classLabels: Record<string, string> = {
+  rest: '静息',
+  feet: '双脚',
+  left_hand: '左手',
+  right_hand: '右手',
+}
+
+function formatProbability(value: number): string {
+  const percent = value * 100
+  if (percent <= 0) return '0%'
+  if (percent < 1) return '<1%'
+  if (percent < 10) return `${percent.toFixed(1)}%`
+  return `${Math.round(percent)}%`
+}
 
 export function SignalChart({
   telemetry,
@@ -19,8 +37,8 @@ export function SignalChart({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.ECharts | null>(null)
-  const values = telemetry.eeg?.values ?? []
-  const channels = telemetry.eeg?.channels ?? []
+  const values = telemetry.eeg?.values ?? emptyValues
+  const channels = telemetry.eeg?.channels ?? emptyChannels
 
   useEffect(() => {
     if (!ref.current) return
@@ -35,11 +53,15 @@ export function SignalChart({
   }, [])
 
   // Filter channels based on selectedChannels and singleChannel
-  const displayChannels = singleChannel
-    ? [singleChannel]
-    : selectedChannels && selectedChannels.length > 0
-      ? selectedChannels.filter((ch) => channels.includes(ch))
-      : channels
+  const displayChannels = useMemo(
+    () =>
+      singleChannel
+        ? [singleChannel]
+        : selectedChannels && selectedChannels.length > 0
+          ? selectedChannels.filter((ch) => channels.includes(ch))
+          : channels,
+    [channels, selectedChannels, singleChannel],
+  )
 
   useEffect(() => {
     const chart = chartRef.current
@@ -48,11 +70,38 @@ export function SignalChart({
     const isSingle = !!singleChannel
     const channelIndices = displayChannels.map((ch) => channels.indexOf(ch)).filter((i) => i >= 0)
 
+    // High electrode impedance can leave only tiny post-CAR/filter amplitudes.
+    // The old fixed divisor plus three-decimal rounding flattened those samples
+    // to zero. Use one robust gain for the visible window so relative channel
+    // amplitudes remain comparable. This only changes display coordinates.
+    const centeredRows = channelIndices.map((chIndex) => {
+      const row = values[chIndex] ?? []
+      const finiteValues = row.filter(Number.isFinite)
+      const mean = finiteValues.length > 0
+        ? finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length
+        : 0
+      return row.map((value) => (Number.isFinite(value) ? value - mean : 0))
+    })
+    const absoluteValues = centeredRows
+      .flatMap((row) => row.map((value) => Math.abs(value)))
+      .sort((a, b) => a - b)
+    const robustIndex = Math.max(0, Math.ceil(absoluteValues.length * 0.98) - 1)
+    const robustAmplitude = absoluteValues.length > 0
+      ? Math.max(absoluteValues[robustIndex], 1e-6)
+      : 1
+    const channelSpacing = 3
+    const laneAmplitude = 1.05
+
     const series = channelIndices.map((chIndex, i) => {
       const channel = channels[chIndex]
       const data = (values[chIndex] ?? []).map((value, point) => [
         point,
-        isSingle ? Number((value / 20).toFixed(3)) : Number((value / 20 + i * 3).toFixed(3)),
+        isSingle
+          ? (Number.isFinite(value) ? value : 0)
+          : Math.max(
+              -1.3,
+              Math.min(1.3, centeredRows[i][point] / robustAmplitude * laneAmplitude),
+            ) + i * channelSpacing,
       ])
       return {
         name: channel,
@@ -137,7 +186,7 @@ export function SignalChart({
   )
 }
 
-export function ProbabilityChart({ telemetry }: { telemetry: Telemetry }) {
+export function ProbabilityChart({ telemetry, active = true }: { telemetry: Telemetry; active?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.ECharts | null>(null)
 
@@ -153,13 +202,26 @@ export function ProbabilityChart({ telemetry }: { telemetry: Telemetry }) {
     }
   }, [])
 
-  const labels = telemetry.model?.class_names ?? []
-  const probs = telemetry.model?.probabilities ?? []
+  const labels = telemetry.model?.class_names ?? emptyChannels
+  const probs = active ? telemetry.model?.probabilities ?? emptyProbabilities : emptyProbabilities
+  const safeProbabilities = labels.map((_, index) => {
+    const value = Number(probs[index] ?? 0)
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+  })
+  // Telemetry also refreshes for EEG and LSL updates. Only repaint this chart
+  // when its own labels/probabilities change, otherwise an animation/update can
+  // be restarted several times between the model's 0.5 s inference frames.
+  const probabilityUpdateKey = `${labels.join('\u0000')}|${safeProbabilities.join(',')}`
+  const probabilityDataRef = useRef({ labels, probabilities: safeProbabilities })
+  probabilityDataRef.current = { labels, probabilities: safeProbabilities }
 
   useEffect(() => {
+    const probabilityData = probabilityDataRef.current
     chartRef.current?.setOption(
       {
-        animationDuration: 300,
+        animation: false,
+        animationDuration: 0,
+        animationDurationUpdate: 0,
         grid: { left: 88, right: 18, top: 10, bottom: 18 },
         xAxis: {
           type: 'value',
@@ -172,7 +234,7 @@ export function ProbabilityChart({ telemetry }: { telemetry: Telemetry }) {
         },
         yAxis: {
           type: 'category',
-          data: labels,
+          data: probabilityData.labels.map((label) => classLabels[label] ?? label),
           axisLabel: { color: '#374151' },
           axisLine: { show: false },
           axisTick: { show: false },
@@ -180,11 +242,12 @@ export function ProbabilityChart({ telemetry }: { telemetry: Telemetry }) {
         series: [
           {
             type: 'bar',
-            data: probs.map((value, index) => ({
+            id: 'yhc-probabilities',
+            data: probabilityData.probabilities.map((value, index) => ({
               value,
               itemStyle: {
                 color: palette[index % palette.length],
-                borderRadius: [0, 4, 4, 0],
+                borderRadius: value === 0 ? 0 : [0, 4, 4, 0],
               },
             })),
             barWidth: 14,
@@ -192,14 +255,14 @@ export function ProbabilityChart({ telemetry }: { telemetry: Telemetry }) {
               show: true,
               position: 'right',
               color: '#111827',
-              formatter: (params: { value: number }) => `${Math.round(params.value * 100)}%`,
+              formatter: (params: { value: number }) => formatProbability(params.value),
             },
           },
         ],
       },
       true,
     )
-  }, [labels, probs])
+  }, [probabilityUpdateKey])
 
   return <div ref={ref} className="probability-chart" />
 }

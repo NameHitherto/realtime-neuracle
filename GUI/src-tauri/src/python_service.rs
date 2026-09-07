@@ -1,16 +1,16 @@
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tokio::sync::Mutex;
+
+use crate::commands::{project_root, resolve_project_path};
 
 pub struct PythonService {
     child: Arc<Mutex<Option<Child>>>,
     game_child: Arc<Mutex<Option<Child>>>,
     stderr_tail: Arc<StdMutex<String>>,
     pub api_url: String,
-    pub ws_url: String,
 }
 
 impl PythonService {
@@ -20,7 +20,6 @@ impl PythonService {
             game_child: Arc::new(Mutex::new(None)),
             stderr_tail: Arc::new(StdMutex::new(String::new())),
             api_url: "http://127.0.0.1:8000".to_string(),
-            ws_url: "ws://127.0.0.1:8000/ws/telemetry".to_string(),
         }
     }
 
@@ -38,8 +37,16 @@ impl PythonService {
             *child_guard = None;
         }
 
-        let resolved_script = resolve_script_path(script_path);
-        let mut cmd = Command::new(python_path);
+        let resolved_python = resolve_project_path(python_path)?;
+        let resolved_script = resolve_project_path(script_path)?;
+        if !resolved_python.is_file() {
+            return Err(format!("Python executable does not exist: {}", resolved_python.display()));
+        }
+        if !resolved_script.is_file() {
+            return Err(format!("Python script does not exist: {}", resolved_script.display()));
+        }
+        let mut cmd = Command::new(&resolved_python);
+        cmd.current_dir(project_root()?);
         cmd.arg(&resolved_script);
         for arg in args {
             cmd.arg(arg);
@@ -132,6 +139,18 @@ impl PythonService {
     }
 
     pub async fn stop(&self) {
+        // Ask Python to stop the acquisition loop and flush all experiment
+        // files before terminating the process. A failed/unresponsive backend
+        // still falls through to the hard process stop below.
+        if let Ok(client) = reqwest::Client::builder()
+            .timeout(Duration::from_secs(4))
+            .build()
+        {
+            let _ = client
+                .post(format!("{}/api/runtime/stop", self.api_url))
+                .send()
+                .await;
+        }
         let mut child_guard = self.child.lock().await;
         if let Some(ref mut child) = *child_guard {
             let _ = child.kill();
@@ -142,13 +161,24 @@ impl PythonService {
 
     pub async fn start_game(&self, game_path: &str) -> Result<(), String> {
         let mut game_guard = self.game_child.lock().await;
-        if game_guard.is_some() {
-            return Ok(());
+        if let Some(child) = game_guard.as_mut() {
+            if child.try_wait().map_err(|e| e.to_string())?.is_none() {
+                return Ok(());
+            }
+            *game_guard = None;
         }
 
-        let child = Command::new(game_path)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+        let resolved_game = resolve_project_path(game_path)?;
+        if !resolved_game.is_file() {
+            return Err(format!("Game executable does not exist: {}", resolved_game.display()));
+        }
+        let game_dir = resolved_game
+            .parent()
+            .ok_or_else(|| format!("Game directory is invalid: {}", resolved_game.display()))?;
+        let child = Command::new(&resolved_game)
+            .current_dir(game_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .map_err(|e| format!("Failed to start game: {}", e))?;
 
@@ -163,24 +193,6 @@ impl PythonService {
             let _ = child.wait();
         }
         *game_guard = None;
-    }
-}
-
-fn resolve_script_path(script_path: &str) -> PathBuf {
-    let path = Path::new(script_path);
-    if path.is_absolute() || path.exists() {
-        return path.to_path_buf();
-    }
-
-    let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
-    let normalized = script_path
-        .trim_start_matches("../")
-        .trim_start_matches("..\\");
-    let project_path = project_root.join(normalized);
-    if project_path.exists() {
-        project_path
-    } else {
-        path.to_path_buf()
     }
 }
 

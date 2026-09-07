@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 use crate::python_service::PythonService;
@@ -24,6 +24,10 @@ pub struct Telemetry {
     pub lsl: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub game: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recording: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibration: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -42,12 +46,6 @@ pub struct Health {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ManualControlPayload {
-    pub control: u8,
-    pub duration_ms: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StartServicePayload {
     pub python_path: String,
     pub script_path: String,
@@ -57,6 +55,64 @@ pub struct StartServicePayload {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StartGamePayload {
     pub game_path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DefaultLaunchPaths {
+    pub python_path: String,
+    pub script_path: String,
+    pub game_path: String,
+}
+
+pub(crate) fn project_root() -> Result<PathBuf, String> {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve project root: {}", e))
+}
+
+pub(crate) fn resolve_project_path(value: &str) -> Result<PathBuf, String> {
+    let path = Path::new(value.trim());
+    if path.as_os_str().is_empty() {
+        return Err("Path cannot be empty".to_string());
+    }
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(project_root()?.join(path))
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::{get_default_launch_paths, resolve_project_path};
+    use std::path::Path;
+
+    #[test]
+    fn default_launch_paths_are_relative_and_resolve_to_files() {
+        let defaults = get_default_launch_paths().expect("default paths");
+        for value in [
+            defaults.python_path,
+            defaults.script_path,
+            defaults.game_path,
+        ] {
+            assert!(!Path::new(&value).is_absolute(), "{value} should be relative");
+            assert!(
+                resolve_project_path(&value).expect("resolved path").is_file(),
+                "{value} should resolve to an existing file"
+            );
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_default_launch_paths() -> Result<DefaultLaunchPaths, String> {
+    Ok(DefaultLaunchPaths {
+        python_path: r".venv\Scripts\python.exe".to_string(),
+        script_path: "dashboard_service.py".to_string(),
+        game_path: r"..\虚拟任务竞速赛06251432\虚拟任务竞速赛.exe".to_string(),
+    })
 }
 
 #[tauri::command]
@@ -173,7 +229,7 @@ pub async fn start_python_service(
 
 #[tauri::command]
 pub async fn check_python_exists(path: String) -> Result<bool, String> {
-    let exists = Path::new(&path).exists();
+    let exists = resolve_project_path(&path)?.is_file();
     Ok(exists)
 }
 
@@ -207,5 +263,7 @@ fn value_to_telemetry(value: Value) -> Telemetry {
         model: value.get("model").cloned(),
         lsl: value.get("lsl").cloned(),
         game: value.get("game").cloned(),
+        recording: value.get("recording").cloned(),
+        calibration: value.get("calibration").cloned(),
     }
 }
