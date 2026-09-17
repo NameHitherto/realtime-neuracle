@@ -41,6 +41,11 @@ function Find-Python310 {
 
     $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Python\Python310\python.exe"))
     $candidates.Add("C:\Program Files\Python310\python.exe")
+    $uvCommand = Get-Command uv.exe -ErrorAction SilentlyContinue
+    if ($uvCommand) {
+        $uvPython = & $uvCommand.Source python find 3.10 2>$null
+        if ($LASTEXITCODE -eq 0 -and $uvPython) { $candidates.Add($uvPython.Trim()) }
+    }
 
     Get-Command python.exe -All -ErrorAction SilentlyContinue | ForEach-Object {
         if ($_.Source) { $candidates.Add($_.Source) }
@@ -73,6 +78,15 @@ function Find-Python310 {
 if (-not (Test-Path -LiteralPath $lockFile -PathType Leaf)) {
     throw "Dependency lock file was not found: $lockFile"
 }
+if ((Test-Path -LiteralPath $venvRoot) -and -not (Test-Python310 $venvPython)) {
+    # A copied venv may still point at the previous machine's interpreter.
+    $resolvedRoot = [IO.Path]::GetFullPath($projectRoot)
+    $resolvedVenv = (Resolve-Path -LiteralPath $venvRoot).Path
+    if ($resolvedVenv -ne (Join-Path $resolvedRoot '.venv')) { throw 'Unexpected venv path; refusing to move.' }
+    $backupVenv = Join-Path $resolvedRoot ('.venv.broken-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    Move-Item -LiteralPath $resolvedVenv -Destination $backupVenv
+    Write-Host "Preserved unusable environment at: $backupVenv"
+}
 if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
     if (-not $PythonPath) { $PythonPath = Find-Python310 }
     if (-not (Test-Python310 $PythonPath)) {
@@ -85,6 +99,11 @@ if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
 }
 
 Write-Host "Installing locked realtime dependencies..."
+& $venvPython -m pip --version 2>$null
+if ($LASTEXITCODE -ne 0) {
+    & $venvPython -m ensurepip --upgrade
+    if ($LASTEXITCODE -ne 0) { throw "Bootstrapping pip failed." }
+}
 & $venvPython -m pip install --disable-pip-version-check --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 & $venvPython -m pip install --disable-pip-version-check -r $lockFile

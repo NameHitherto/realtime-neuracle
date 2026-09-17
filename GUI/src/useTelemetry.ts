@@ -105,21 +105,30 @@ export function useTelemetry() {
     let unlistenConnected: UnlistenFn | null = null
     let socket: WebSocket | null = null
     let interval: number | undefined
+    let retry: number | undefined
+    let disposed = false
 
     const setup = async () => {
       if (!isTauriRuntime()) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        socket = new WebSocket(`${protocol}//${window.location.host}/ws/telemetry`)
-        socket.onopen = () => {
-          setConnected(true)
-          loadEvents()
+        const connect = () => {
+          if (disposed) return
+          socket = new WebSocket(`${protocol}//${window.location.host}/ws/telemetry`)
+          socket.onopen = () => {
+            setConnected(true)
+            loadEvents()
+          }
+          socket.onclose = () => {
+            setConnected(false)
+            if (!disposed) retry = window.setTimeout(connect, 1500)
+          }
+          socket.onerror = () => setConnected(false)
+          socket.onmessage = (event) => {
+            const payload = JSON.parse(event.data) as Telemetry
+            acceptTelemetry(payload)
+          }
         }
-        socket.onclose = () => setConnected(false)
-        socket.onerror = () => setConnected(false)
-        socket.onmessage = (event) => {
-          const payload = JSON.parse(event.data) as Telemetry
-          acceptTelemetry(payload)
-        }
+        connect()
         interval = window.setInterval(loadEvents, 3000)
         return
       }
@@ -139,6 +148,8 @@ export function useTelemetry() {
     setup()
 
     return () => {
+      disposed = true
+      window.clearTimeout(retry)
       if (unlistenTelemetry) unlistenTelemetry()
       if (unlistenConnected) unlistenConnected()
       if (socket) socket.close()

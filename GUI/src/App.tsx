@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 const statusLabels: Record<string, string> = {
   device_tcp: 'EEG TCP',
   inference: '模型推理',
+  game_output: '游戏指令输出',
   lsl_outlet: 'LSL 输出',
   lsl_consumer: 'LSL Receiver'
 }
@@ -152,7 +153,7 @@ function App() {
   const status = telemetry.status ?? {}
   const model = telemetry.model ?? {}
   const healthLevel = telemetry.health?.level ?? 'yellow'
-  const inferenceActive = status.inference === 'running'
+  const inferenceActive = connected && status.inference === 'running'
   const serviceActive = ['starting', 'waiting', 'calibrating', 'running', 'reconnecting'].includes(
     status.inference ?? '',
   )
@@ -163,6 +164,13 @@ function App() {
   const [pythonPath, setPythonPath] = useState('')
   const [scriptPath, setScriptPath] = useState('')
   const [eegSource, setEegSource] = useState<'neuracle' | 'local'>('neuracle')
+  const [debugControls, setDebugControls] = useState(false)
+  const [eegHost, setEegHost] = useState('127.0.0.1')
+  const [eegPort, setEegPort] = useState('8712')
+  const [gameTransport, setGameTransport] = useState('lsl')
+  const [tcpProfile, setTcpProfile] = useState('')
+  const [lslConfig, setLslConfig] = useState('')
+  const [remoteGame, setRemoteGame] = useState(true)
   const [localEegFile, setLocalEegFile] = useState('')
   const [serviceRunning, setServiceRunning] = useState(false)
   const [gamePath, setGamePath] = useState('')
@@ -224,6 +232,14 @@ function App() {
       showMessage('请选择本地 BDF 文件')
       return
     }
+    if (eegSource === 'local' && !debugControls) {
+      showMessage('正式模式只允许实时 EEG；回放请先选择联调模式')
+      return
+    }
+    if (gameTransport === 'tcp-json' && !tcpProfile.trim()) {
+      showMessage('请提供经赛方确认的 TCP 协议配置文件')
+      return
+    }
     try {
       const args: string[] = [
         '--model',
@@ -236,7 +252,12 @@ function App() {
         '0.55',
         '--save-logs',
         '--auto-reconnect',
+        '--host', eegHost.trim(), '--port', eegPort,
+        '--game-transport', gameTransport,
       ]
+      if (debugControls) args.push('--debug-controls')
+      if (gameTransport === 'tcp-json') args.push('--game-tcp-profile', tcpProfile)
+      if (lslConfig.trim()) args.push('--lsl-config', lslConfig)
       if (eegSource === 'local') {
         args.push('--eeg-source', 'local', '--local-eeg-file', localEegFile)
       } else {
@@ -269,6 +290,7 @@ function App() {
   }
 
   const startGame = async () => {
+    if (remoteGame) return
     if (!gamePath.trim()) {
       showMessage('请选择游戏可执行文件路径')
       return
@@ -348,6 +370,33 @@ function App() {
             </div>
           ) : (
             <div className="p-4 space-y-3">
+              <label className="block text-xs text-gray-600">
+                <input type="checkbox" checked={debugControls} onChange={(e) => { setDebugControls(e.target.checked); if (!e.target.checked) setEegSource('neuracle') }} />
+                {' '}联调模式（允许回放和人工测试，正式比赛必须关闭）
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-gray-600">EEG 采集电脑地址
+                  <input aria-label="EEG 采集电脑地址" value={eegHost} onChange={(e) => setEegHost(e.target.value)} className="w-full px-3 py-2 border rounded-lg" />
+                </label>
+                <label className="text-xs text-gray-600">EEG TCP 端口
+                  <input aria-label="EEG TCP 端口" type="number" min="1" max="65535" value={eegPort} onChange={(e) => setEegPort(e.target.value)} className="w-full px-3 py-2 border rounded-lg" />
+                </label>
+              </div>
+              <label className="block text-xs text-gray-600">游戏通信接口
+                <select aria-label="游戏通信接口" value={gameTransport} onChange={(e) => setGameTransport(e.target.value)} className="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="lsl">LSL（0911 客户端已核实，可跨局域网）</option>
+                  <option value="tcp-json">TCP + JSON（协议须现场确认）</option>
+                </select>
+              </label>
+              {gameTransport === 'tcp-json' ? (
+                <label className="block text-xs text-gray-600">赛方确认的 TCP 配置文件（含游戏 IP / 端口 / JSON / 分帧）
+                  <input aria-label="TCP 配置文件" value={tcpProfile} onChange={(e) => setTcpProfile(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="configs/game_tcp.site.json" />
+                </label>
+              ) : (
+                <label className="block text-xs text-gray-600">LSL 配置文件（可选；用于指定局域网发现配置）
+                  <input aria-label="LSL 配置文件" value={lslConfig} onChange={(e) => setLslConfig(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="留空使用默认发现；EEGback|EEG" />
+                </label>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">项目 Python 环境（相对项目目录）</label>
@@ -397,7 +446,7 @@ function App() {
                     className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
                   >
                     <option value="neuracle">博睿康采集软件 (TCP)</option>
-                    <option value="local">本地 EEG 数据</option>
+                    <option value="local" disabled={!debugControls}>本地 EEG 数据（仅联调）</option>
                   </select>
                 </div>
                 {eegSource === 'local' && (
@@ -436,7 +485,22 @@ function App() {
 
         {/* Game Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <SectionTitle eyebrow="LAUNCH" title="赛车游戏 Demo" meta={gameRunning ? '运行中' : '已停止'} />
+          <SectionTitle eyebrow="GAME" title="0911 最终版游戏" meta={remoteGame ? '赛事电脑运行' : gameRunning ? '运行中' : '已停止'} />
+          <label className="block px-4 py-3 text-sm text-gray-600">
+            <input type="checkbox" checked={remoteGame} disabled={gameRunning} onChange={(e) => setRemoteGame(e.target.checked)} />
+            {' '}游戏运行在赛事电脑（局域网连接）
+          </label>
+          {remoteGame ? (
+            <div className="p-4 text-sm text-gray-600 space-y-3">
+              <p>在赛事电脑启动官方客户端；在本机选择游戏通信接口后启动模型服务。</p>
+              <p>LSL：赛事电脑订阅本机 EEGback|EEG，确认接收端已连接。TCP：先向赛方确认协议，再填写配置文件。</p>
+              <p>最后发送：{telemetry.game?.last_sent == null ? '尚无成功发送' : `${telemetry.game.last_sent} / ${controlGlyphs[telemetry.game.last_sent]}`}</p>
+              <p>接收连接：{telemetry.game?.peer_connected ? '已连接（不代表车辆执行确认）' : '未确认'}</p>
+              <p className="text-amber-700">stop 表示停止指令；最终版车辆行为由赛道区域决定。</p>
+              {telemetry.game?.error && <p className="text-red-600">{telemetry.game.error}</p>}
+            </div>
+          ) : (
+          <>
           {gameCollapsed ? (
             <div className="p-4 flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-50 border-emerald-200 text-emerald-700">
@@ -459,7 +523,7 @@ function App() {
                   value={gamePath}
                   onChange={(e) => setGamePath(e.target.value)}
                   className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  placeholder="..\\虚拟任务竞速赛06251432\\虚拟任务竞速赛.exe"
+                  placeholder="选择虚拟任务竞速赛_0911_禁键盘_比赛版本中的 exe"
                 />
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -479,6 +543,8 @@ function App() {
                 </button>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       </section>

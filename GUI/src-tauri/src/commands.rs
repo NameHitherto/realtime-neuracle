@@ -95,7 +95,6 @@ mod path_tests {
         for value in [
             defaults.python_path,
             defaults.script_path,
-            defaults.game_path,
         ] {
             assert!(!Path::new(&value).is_absolute(), "{value} should be relative");
             assert!(
@@ -111,7 +110,12 @@ pub fn get_default_launch_paths() -> Result<DefaultLaunchPaths, String> {
     Ok(DefaultLaunchPaths {
         python_path: r".venv\Scripts\python.exe".to_string(),
         script_path: "dashboard_service.py".to_string(),
-        game_path: r"..\虚拟任务竞速赛06251432\虚拟任务竞速赛.exe".to_string(),
+        // The race client normally runs on another PC. Local launch is optional.
+        game_path: std::env::var("BCI_GAME_EXE").unwrap_or_else(|_| {
+            let local = project_root().unwrap_or_default()
+                .join(r"..\虚拟任务竞速赛_0911_禁键盘_比赛版本\虚拟任务竞速赛.exe");
+            if local.is_file() { local.to_string_lossy().into_owned() } else { String::new() }
+        }),
     })
 }
 

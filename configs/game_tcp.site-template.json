@@ -1,0 +1,13 @@
+{
+  "confirmed_by_organizer": false,
+  "role": "client",
+  "host": "",
+  "port": null,
+  "framing": "",
+  "messages": {
+    "left": {},
+    "right": {},
+    "forward": {},
+    "stop": {}
+  }
+}

@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 from experiment_logger import ExperimentLogger
+from game_output import ControlPublisher, TCPJSONOutlet
 from telemetry_core import TelemetryBus
 from realtime_common import (
     DataBlock,
@@ -142,6 +143,10 @@ class LocalEEGSimulator:
 
 class InferenceRuntime:
     def __init__(self, args: argparse.Namespace, bus: TelemetryBus):
+        validate_runtime_args(args)
+        # LSL reads its config once, before the first outlet is created.
+        if args.lsl_config:
+            os.environ["LSLAPICFG"] = str(Path(args.lsl_config).resolve(strict=True))
         self.args = args
         self.bus = bus
         self.model_name = args.model
@@ -153,6 +158,10 @@ class InferenceRuntime:
         validate_yhc_checkpoint(checkpoint)
         self.preprocessor = build_yhc_preprocessor(args, checkpoint)
         self.outlet: LSLControlOutlet | None = None
+        self.publisher: ControlPublisher | None = None
+        self._output_error: str | None = None
+        self._last_eeg_mono = 0.0
+        self._manual_until = 0.0
         self.current_control = int(args.default_control)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -255,22 +264,20 @@ class InferenceRuntime:
 
     def stop(self) -> None:
         self._stop.set()
+        if self.publisher:
+            self.publisher.stop()
         if self._thread:
             self._thread.join(timeout=3.0)
         if not self._thread or not self._thread.is_alive():
             self._close_logger("completed")
         self.current_control = int(self.args.default_control)
-        if self.outlet is not None:
-            try:
-                self.outlet.push(self.current_control)
-            except Exception:
-                pass
         self.bus.update(
             status={
                 "inference": "stopped",
                 "device_tcp": "stopped",
                 "lsl_outlet": "stopped",
                 "lsl_consumer": "unknown",
+                "game_output": "stopped",
             },
             model={
                 "probabilities": [],
@@ -282,55 +289,71 @@ class InferenceRuntime:
                 "last_inference_at": None,
             },
             lsl={
-                "last_sent": self.current_control,
                 "consumer_online": False,
             },
+            game={"peer_connected": False},
             health={"level": "yellow", "message": "模型服务已停止"},
         )
 
     def manual_control(self, control: int, duration_ms: int = 1000) -> None:
+        if not self.args.debug_controls:
+            raise PermissionError("正式模式禁止人工控制；仅 --debug-controls 联调模式可用")
+        if not self.publisher or self._stop.is_set():
+            raise ValueError("输出服务未运行")
         if not 0 <= control <= 3:
             raise ValueError("control must be one of 0, 1, 2, 3")
+        if not 100 <= duration_ms <= 10000:
+            raise ValueError("duration_ms must be 100..10000")
         self.current_control = control
-        now = time.time()
-        if self.outlet:
-            self.outlet.push(control)
-            if self.logger:
-                self.logger.log_control(now, control, CONTROL_NAMES[control], "manual")
-        self._event("info", "测试控制指令已发送", control=control, name=CONTROL_NAMES[control], duration_ms=duration_ms)
+        self._manual_until = time.monotonic() + duration_ms / 1000
+        self.publisher.submit(control, duration_ms / 1000)
+        self._event("warning", "调试模式人工指令已提交（非脑控）", control=control, duration_ms=duration_ms)
         self.bus.update(
             model={
                 "control": control,
                 "control_name": CONTROL_NAMES[control],
                 "action_name": CONTROL_NAMES[control],
             },
-            lsl={"last_sent": control},
         )
 
-    def _publish(self) -> None:
-        if self.outlet:
-            now = time.time()
-            self.outlet.push(self.current_control)
-            if self.logger:
-                self.logger.log_control(
-                    now,
-                    self.current_control,
-                    CONTROL_NAMES[self.current_control],
-                    "lsl",
-                )
-            self.bus.update(
-                lsl={
-                    "last_sent": self.current_control,
-                    "last_sent_at": now,
-                    "consumer_online": self.outlet.have_consumers(),
-                }
-            )
+    def _output_guard(self) -> bool:
+        if self._stop.is_set():
+            return False
+        if self.args.debug_controls and time.monotonic() < self._manual_until:
+            return True
+        return (not self._stream_faulted and self._calibrated
+                and time.monotonic() - self._last_eeg_mono < self.args.data_timeout_sec)
+
+    def _on_output(self, actual: int | None, error: str | None) -> None:
+        if error != self._output_error:
+            self._event("error" if error else "info", "游戏输出失败" if error else "游戏输出恢复", error=error)
+            self._output_error = error
+        online = self.publisher.consumer_online if self.publisher else False
+        if actual is not None and self.logger:
+            self.logger.log_control(time.time(), actual, CONTROL_NAMES[actual],
+                                    self.args.game_transport + ("_debug" if self.args.debug_controls else ""))
+        updates = dict(
+            status={"game_output": "error" if error else "running"},
+            health=self._health(),
+            game={"transport": self.args.game_transport, "last_sent": actual,
+                  "last_sent_at": time.time() if actual is not None else None,
+                  "peer_connected": online, "error": error,
+                  "delivery": "failed" if error else "submitted_unacknowledged",
+                  "mode": "debug" if self.args.debug_controls else "competition"},
+        )
+        if self.args.game_transport == "lsl":
+            updates["lsl"] = {"last_sent": actual, "last_sent_at": time.time() if actual is not None else None, "consumer_online": online}
+            updates["status"].update(lsl_outlet="error" if error else "running", lsl_consumer="connected" if online else "unknown")
+        self.bus.update(**updates)
 
     def _force_stop(self, message: str) -> None:
         first_fault = not self._stream_faulted
         self._stream_faulted = True
         self.current_control = int(self.args.default_control)
-        self._publish()
+        self._last_inference_at = 0.0
+        self._smoother.clear()
+        if self.publisher:
+            self.publisher.invalidate()
         if first_fault:
             self._event("warning", message, control=self.current_control)
         self.bus.update(
@@ -506,16 +529,20 @@ class InferenceRuntime:
         self,
         server: Any,
         n_points: int,
-        publish_interval: float,
     ) -> None:
-        next_publish = 0.0
         next_infer = time.time() + self.args.step_sec
         connected_at = time.time()
-        rate_started_at = time.monotonic()
+        rate_started_at = None
         rate_received_samples = 0
         rate_validated = False
         self._last_eeg_at = connected_at
+        self._last_eeg_mono = time.monotonic()
         self._stream_faulted = False
+        self._last_inference_at = 0.0
+        self._baseline_start_updates = 0
+        self._smoother.clear()
+        if self.publisher:
+            self.publisher.invalidate()
 
         if self.args.eeg_source == "neuracle":
             self._event(
@@ -542,12 +569,24 @@ class InferenceRuntime:
                 block = server.poll()
             except TimeoutError:
                 if time.time() - self._last_eeg_at >= float(self.args.data_timeout_sec):
-                    self._force_stop("EEG 数据超时，已强制停车")
+                    self._force_stop("EEG 数据超时，已切换 stop 指令")
+                    # Discard the entire connection/buffer after a gap. Never
+                    # mix pre-gap EEG or a partial frame with fresh windows.
+                    raise ConnectionError("EEG stale; reconnect and refill a complete window")
                 continue
 
             now = time.time()
+            if block is None and time.monotonic() - self._last_eeg_mono >= self.args.data_timeout_sec:
+                raise ConnectionError("EEG produced no complete frames before deadline")
             if block is not None:
+                if not np.isfinite(block.eeg).all():
+                    raise StreamContractError("EEG contains NaN/Inf; output stopped")
+                if rate_started_at is None:
+                    # A connected EEG socket may wait before data sending is
+                    # enabled. Do not count that idle time as a wrong frame width.
+                    rate_started_at = time.monotonic() - block.eeg.shape[1] / self.args.device_sfreq
                 self._last_eeg_at = now
+                self._last_eeg_mono = time.monotonic()
                 rate_received_samples += int(block.eeg.shape[1])
                 if self._stream_faulted:
                     self._stream_faulted = False
@@ -556,11 +595,9 @@ class InferenceRuntime:
                 if self.logger:
                     self.logger.log_data(block)
 
-            if now >= next_publish:
-                self._publish()
-                next_publish = now + publish_interval
-
             if not rate_validated:
+                if rate_started_at is None:
+                    continue
                 rate_validated = self._validate_receive_rate(
                     rate_received_samples,
                     time.monotonic() - rate_started_at,
@@ -627,6 +664,8 @@ class InferenceRuntime:
                     self._smoother,
                 )
                 accepted = conf >= self.args.min_confidence
+                if not np.isfinite(probs).all() or not math.isfinite(conf):
+                    raise ValueError("Non-finite model output")
                 self.current_control = (
                     self.control_map.get(pred, self.current_control)
                     if accepted
@@ -635,6 +674,8 @@ class InferenceRuntime:
                 action_name = YHC_CLASS_ACTION_NAMES[pred] if accepted else "stop"
                 self.last_prediction = pred
                 self._last_inference_at = now
+                if time.monotonic() >= self._manual_until and not self._stop.is_set():
+                    self.publisher.submit(self.current_control, self.args.command_ttl_sec)
                 latest_trigger = self._latest_trigger(server, block)
                 if self.logger:
                     self.logger.log_prediction(
@@ -660,10 +701,6 @@ class InferenceRuntime:
                         "action_name": action_name,
                         "last_inference_at": now,
                     },
-                    lsl={
-                        "last_sent": self.current_control,
-                        "consumer_online": self.outlet.have_consumers(),
-                    },
                     recording={
                         "samples_saved": self.logger.total_samples,
                         "predictions_saved": self.logger.total_predictions,
@@ -672,13 +709,13 @@ class InferenceRuntime:
                     else {"enabled": False},
                     status={
                         "inference": "running",
-                        "lsl_consumer": "connected"
-                        if self.outlet.have_consumers()
-                        else "unknown",
                     },
                     health=self._health(),
                 )
             except (RuntimeError, ValueError) as exc:
+                self.current_control = 3
+                self.publisher.invalidate()
+                self._smoother.clear()
                 self._event("warning", "推理窗口暂不可用", error=str(exc))
 
     def _loop(self) -> None:
@@ -686,24 +723,28 @@ class InferenceRuntime:
             self._dry_run()
             return
         try:
-            self.outlet = LSLControlOutlet(
+            self.outlet = TCPJSONOutlet(self.args.game_tcp_profile) if self.args.game_transport == "tcp-json" else LSLControlOutlet(
                 stream_name=self.args.stream_name,
                 stream_type=self.args.stream_type,
                 sample_rate=self.args.lsl_rate,
                 source_id=f"{self.model_name}_dashboard_control",
             )
             self.bus.update(
-                status={"lsl_outlet": "running"},
+                status={"lsl_outlet": "running" if self.args.game_transport == "lsl" else "disabled"},
                 lsl={"stream_name": self.args.stream_name, "stream_type": self.args.stream_type, "sample_rate": self.args.lsl_rate},
             )
+            self.publisher = ControlPublisher(self.outlet, self.args.lsl_rate, self._output_guard, self._on_output)
+            self.publisher.start()
+            if self._stop.is_set():
+                self.publisher.stop()
+                return
         except Exception as exc:
-            self._event("error", "LSL 输出初始化失败", error=str(exc))
-            self.bus.update(status={"lsl_outlet": "error"}, health={"level": "red", "message": "pylsl/LSL 输出不可用"})
+            self._event("error", "游戏输出初始化失败", error=str(exc))
+            self.bus.update(status={"game_output": "error", "inference": "error"}, health={"level": "red", "message": str(exc)})
             self._close_logger("failed", str(exc))
             return
 
         n_points = int(round(self.args.window_sec * self.args.device_sfreq))
-        publish_interval = 1.0 / max(float(self.args.lsl_rate), 1e-6)
         buffer_seconds = max(
             self.args.window_sec + 2.0,
             self.args.window_sec * 2,
@@ -719,9 +760,9 @@ class InferenceRuntime:
             try:
                 server = self._create_data_source(buffer_seconds)
                 with server:
-                    self._run_connected_source(server, n_points, publish_interval)
+                    self._run_connected_source(server, n_points)
             except StreamContractError as exc:
-                self._force_stop("EEG 发送帧配置错误，已强制停车")
+                self._force_stop("EEG 发送帧配置错误，已切换 stop 指令")
                 self._event("error", "EEG 数据契约验证失败", error=str(exc))
                 self.bus.update(
                     status={"device_tcp": "error", "inference": "error"},
@@ -732,7 +773,7 @@ class InferenceRuntime:
             except Exception as exc:
                 if self._stop.is_set():
                     break
-                self._force_stop("EEG 连接中断，已强制停车")
+                self._force_stop("EEG 连接中断，已切换 stop 指令")
                 self._event("error", "EEG 连接中断", error=str(exc))
                 if self.args.eeg_source == "local" or not self.args.auto_reconnect:
                     self.bus.update(
@@ -759,19 +800,21 @@ class InferenceRuntime:
         return values[..., ::stride]
 
     def _health(self) -> dict[str, str]:
-        lsl_online = bool(self.outlet and self.outlet.have_consumers())
+        lsl_online = bool(self.publisher and self.publisher.consumer_online)
+        if self.publisher and self.publisher.last_error:
+            return {"level": "red", "message": "游戏输出失败，车辆执行状态未知"}
         status = self.bus.snapshot().get("status", {})
         if status.get("device_tcp") in {"stale", "reconnecting", "error"}:
-            return {"level": "red", "message": "EEG 数据不可用，当前已停车"}
+            return {"level": "red", "message": "EEG 数据不可用，输出 stop；车辆状态需现场确认"}
         if status.get("inference") == "calibrating":
             return {"level": "yellow", "message": "正在采集静息基线"}
         if not self.outlet:
-            return {"level": "red", "message": "LSL 输出未启动"}
+            return {"level": "red", "message": "游戏输出未启动"}
         if time.time() - self._last_inference_at > max(3.0, self.args.step_sec * 4):
             return {"level": "yellow", "message": "等待有效 EEG 推理窗口"}
         if not lsl_online:
-            return {"level": "yellow", "message": "LSL Receiver 尚未发现"}
-        return {"level": "green", "message": "脑电-模型-LSL 链路运行中"}
+            return {"level": "yellow", "message": "游戏接收端尚未连接"}
+        return {"level": "green", "message": "脑电-模型-发送链路运行中（无指令执行确认）"}
 
     def _dry_run(self) -> None:
         n_points = int(round(self.args.window_sec * self.args.device_sfreq))
@@ -781,10 +824,10 @@ class InferenceRuntime:
         control = self.control_map[pred]
         now = time.time()
         self.bus.update(
-            status={"device_tcp": "dry-run", "inference": "running", "lsl_outlet": "disabled"},
+            status={"device_tcp": "dry-run", "inference": "dry-run", "lsl_outlet": "disabled", "game_output": "disabled"},
             model={"name": self.model_name, "class_names": self.class_names, "probabilities": probs.tolist(), "prediction": self.class_names[pred], "confidence": conf, "control": control, "control_name": CONTROL_NAMES[control], "action_name": YHC_CLASS_ACTION_NAMES[pred], "device": str(self.device), "last_inference_at": now},
             eeg={"sample_rate": self.args.device_sfreq, "channels": self.display_channels, "values": self._downsample(fake, 50).tolist(), "display_rate": 50, "last_data_at": now, "latest_trigger": 0},
-            lsl={"stream_name": self.args.stream_name, "stream_type": self.args.stream_type, "consumer_online": False, "last_sent": control},
+            lsl={"stream_name": self.args.stream_name, "stream_type": self.args.stream_type, "consumer_online": False, "last_sent": None},
             game={"telemetry_level": "inferred"},
             health={"level": "yellow", "message": "离线 dry-run：未连接设备和游戏"},
         )
@@ -816,6 +859,11 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stream-name", default="EEGback")
     parser.add_argument("--stream-type", default="EEG")
     parser.add_argument("--lsl-rate", type=float, default=10.0)
+    parser.add_argument("--lsl-config", default=None, help="liblsl config path (set before outlet creation)")
+    parser.add_argument("--game-transport", choices=["lsl", "tcp-json"], default="lsl")
+    parser.add_argument("--game-tcp-profile", default=None, help="Organizer-confirmed JSON wire profile")
+    parser.add_argument("--command-ttl-sec", type=float, default=1.5)
+    parser.add_argument("--debug-controls", action="store_true", help="Non-competition mode: permit manual control and local replay")
     parser.add_argument("--default-control", type=int, default=3)
     parser.add_argument("--min-confidence", type=float, default=0.55)
     parser.add_argument(
@@ -848,9 +896,35 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validate_runtime_args(args) -> None:
+    for name in ("lsl_rate", "command_ttl_sec", "step_sec", "device_sfreq", "model_sfreq", "window_sec",
+                 "socket_timeout_sec", "data_timeout_sec", "reconnect_sec", "rate_check_sec", "display_update_sec"):
+        value = getattr(args, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"{name} must be finite and > 0")
+    if args.lsl_rate > 100 or args.command_ttl_sec < args.step_sec:
+        raise ValueError("Output rate must be <=100 and command lifetime >= inference step")
+    if args.default_control != 3:
+        raise ValueError("Fallback control must be stop (3)")
+    if args.eeg_source == "local" and not args.debug_controls:
+        raise ValueError("Local EEG replay requires --debug-controls; prohibited in competition mode")
+    if args.eeg_source == "local" and not args.local_eeg_file:
+        raise ValueError("Local EEG replay needs --local-eeg-file")
+    if args.game_transport == "tcp-json":
+        if not args.game_tcp_profile:
+            raise ValueError("TCP JSON requires --game-tcp-profile confirmed on site")
+        TCPJSONOutlet(args.game_tcp_profile)  # Validate without connecting.
+    if args.game_transport == "lsl" and args.game_tcp_profile:
+        raise ValueError("--game-tcp-profile requires --game-transport tcp-json")
+
+
 def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
+    try:
+        validate_runtime_args(args)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
     if args.live_baseline_sec < 0:
         parser.error("--live-baseline-sec must be >= 0")
     if args.display_update_sec <= 0 or args.socket_timeout_sec <= 0:

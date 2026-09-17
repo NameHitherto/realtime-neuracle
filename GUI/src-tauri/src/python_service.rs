@@ -67,7 +67,8 @@ impl PythonService {
                         tail.push_str(&line);
                         tail.push('\n');
                         if tail.len() > 16_384 {
-                            let split_at = tail.len() - 16_384;
+                            let mut split_at = tail.len() - 16_384;
+                            while !tail.is_char_boundary(split_at) { split_at += 1; }
                             tail.drain(..split_at);
                         }
                     }
@@ -136,6 +137,11 @@ impl PythonService {
             "Python service failed to start within timeout (script: {})",
             resolved_script.display()
         ))
+    }
+
+    pub async fn stop_owned(&self) {
+        let owns_child = self.child.lock().await.is_some();
+        if owns_child { self.stop().await; }
     }
 
     pub async fn stop(&self) {

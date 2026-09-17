@@ -3,6 +3,7 @@ mod python_service;
 mod telemetry_client;
 
 use std::sync::Arc;
+use tauri::Manager;
 
 use crate::commands::*;
 use crate::python_service::PythonService;
@@ -40,6 +41,15 @@ pub fn run() {
             start_game_process,
             stop_game_process,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let service = app.state::<Arc<PythonService>>().inner().clone();
+                tauri::async_runtime::block_on(async move {
+                    service.stop_owned().await;
+                    service.stop_game().await;
+                });
+            }
+        });
 }

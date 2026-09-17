@@ -76,6 +76,9 @@ def model_self_test() -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--game-dir', type=Path, help='Optional local final client; not required on the EEG computer')
+    args = parser.parse_args()
     print(f"Python: {sys.version.split()[0]}")
     print(f"Executable: {sys.executable}")
     errors: list[str] = []
@@ -94,21 +97,17 @@ def main() -> int:
         ROOT / "experiment_logger.py",
         ROOT / "model_deps" / "model_hyena_input_motor_rhythm_enhanced_classifier.py",
         ROOT / "GUI" / "package.json",
-        WORKSPACE / "虚拟任务竞速赛06251432" / "虚拟任务竞速赛.exe",
-        WORKSPACE
-        / "虚拟任务竞速赛06251432"
-        / "虚拟任务竞速赛_Data"
-        / "StreamingAssets"
-        / "LSLInletConfig.txt",
     ]
+    if args.game_dir:
+        required_files.extend([args.game_dir / '虚拟任务竞速赛.exe', args.game_dir / '虚拟任务竞速赛_Data/StreamingAssets/LSLInletConfig.txt'])
     for path in required_files:
         ok = path.exists()
         print(f"{path.name:>55}: {'OK' if ok else 'MISSING'}")
         if not ok:
             errors.append(str(path))
 
-    lsl_config = required_files[-1]
-    if lsl_config.exists():
+    lsl_config = args.game_dir / '虚拟任务竞速赛_Data/StreamingAssets/LSLInletConfig.txt' if args.game_dir else None
+    if lsl_config and lsl_config.exists():
         value = lsl_config.read_text(encoding="utf-8").strip()
         print(f"{'game LSL config':>55}: {value}")
         if value != "EEGback|EEG":

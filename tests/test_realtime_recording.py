@@ -37,10 +37,10 @@ class _FixedModel(torch.nn.Module):
 
 
 class RealtimeRecordingTests(unittest.TestCase):
-    def test_yhc_class_actions_keep_stop_outside_the_four_model_classes(self):
-        self.assertEqual(CONTROL_MAP, {0: 2, 1: 2, 2: 0, 3: 1})
-        self.assertEqual(CLASS_ACTION_NAMES, ["accelerate", "forward", "left", "right"])
-        self.assertNotIn(3, CONTROL_MAP.values())
+    def test_yhc_classes_cover_all_four_official_states(self):
+        self.assertEqual(CONTROL_MAP, {0: 3, 1: 2, 2: 0, 3: 1})
+        self.assertEqual(CLASS_ACTION_NAMES, ["stop", "forward", "left", "right"])
+        self.assertEqual(set(CONTROL_MAP.values()), {0, 1, 2, 3})
 
     def test_neusen_stream_is_64_eeg_plus_trigger(self):
         self.assertEqual(len(NEUSEN_W_64_EEG_CHANNELS), 64)

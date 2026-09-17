@@ -110,7 +110,12 @@ class DataServer:
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.settimeout(self.socket_timeout_seconds)
-        self._socket.connect((self.host, self.port))
+        try:
+            self._socket.connect((self.host, self.port))
+        except OSError:
+            self._socket.close()
+            self._socket = None
+            raise
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -168,7 +173,9 @@ class LSLControlOutlet:
             channel_format="float32",
             source_id=source_id,
         )
-        self.outlet = StreamOutlet(info)
+        # Control state is perishable; do not retain the default multi-minute
+        # sample backlog during receiver/network stalls.
+        self.outlet = StreamOutlet(info, chunk_size=1, max_buffered=1)
         self.stream_name = stream_name
         self.stream_type = stream_type
         self.sample_rate = float(sample_rate)

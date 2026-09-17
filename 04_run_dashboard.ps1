@@ -10,6 +10,10 @@ param(
     [string]$ChannelFile = "",
     [string]$LogDir = "",
     [string]$ExperimentId = "yhc_realtime",
+    [ValidateSet('lsl', 'tcp-json')][string]$GameTransport = 'lsl',
+    [string]$GameTcpProfile = '',
+    [string]$LslConfig = '',
+    [switch]$DebugControls,
     [switch]$Cpu,
     [switch]$DryRun
 )
@@ -41,11 +45,15 @@ $arguments = @(
     "--channel-list-file", $ChannelFile,
     "--log-dir", $LogDir,
     "--experiment-id", $ExperimentId,
+    "--game-transport", $GameTransport,
     "--save-logs",
     "--auto-reconnect"
 )
 if ($Cpu) { $arguments += "--cpu" }
 if ($DryRun) { $arguments += "--dry-run" }
+if ($DebugControls) { $arguments += "--debug-controls" }
+if ($GameTcpProfile) { $arguments += @('--game-tcp-profile', $GameTcpProfile) }
+if ($LslConfig) { $arguments += @('--lsl-config', $LslConfig) }
 
 $env:DASHBOARD_PORT = "$DashboardPort"
 Write-Host "Starting YHC BCI dashboard backend: http://127.0.0.1:$DashboardPort"

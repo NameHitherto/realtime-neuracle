@@ -44,18 +44,16 @@ CLASS_NAMES = ["rest", "feet", "left_hand", "right_hand"]
 CLASS_NAMES_ZH = ["静息", "双脚运动想象", "左手运动想象", "右手运动想象"]
 
 # The compiled game uses 0=left, 1=right, 2=accelerator and 3=brake/stop.
-# Both "forward" and "accelerate" therefore use the physical accelerator,
-# while CLASS_ACTION_NAMES keeps their classification semantics distinct in
-# telemetry and the GUI. Code 3 is reserved for safety stop and is not a YHC
-# model class.
+# Rest supplies the fourth state: stop / charge in the acceleration region.
+# A stop command is not a guarantee of zero speed in all official track regions.
 CONTROL_MAP = {
-    0: 2,  # rest -> accelerate
+    0: 3,  # rest -> stop / charge
     1: 2,  # feet -> forward
     2: 0,  # left_hand -> left
     3: 1,  # right_hand -> right
 }
 CONTROL_NAMES = {0: "left", 1: "right", 2: "forward", 3: "stop"}
-CLASS_ACTION_NAMES = ["accelerate", "forward", "left", "right"]
+CLASS_ACTION_NAMES = ["stop", "forward", "left", "right"]
 
 DEFAULT_CHECKPOINT = SCRIPT_DIR / "checkpoints" / "yhc_hyena_final_realtime.pth"
 
