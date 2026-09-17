@@ -23,7 +23,7 @@
 .\.venv\Scripts\python.exe .\01_check_environment.py
 ```
 
-安装脚本会自动查找本机的 Python 3.10（包括已有 Conda 环境），创建项目独立的 `.venv`，按 `requirements_realtime.lock.txt` 安装 Python 依赖，并安装、构建和检查 React/Tauri GUI。它不会激活或修改 Conda 环境。本机验证组合为 Python 3.10、NumPy 1.26.4、PyTorch 2.4.0；默认 PyTorch 包使用 CPU，足以运行当前实时推理。若只需安装 Python，可使用 `-SkipGui`；若暂时跳过构建检查，可使用 `-SkipChecks`。
+安装脚本会自动查找本机的 Python 3.10（包括已有 Conda 环境），创建项目独立的 `.venv`，按 `requirements_realtime.lock.txt` 安装 Python 依赖，并安装、构建和检查 React/Tauri GUI。它不会激活或修改 Conda 环境。若只需安装 Python，可使用 `-SkipGui`；若暂时跳过构建检查，可使用 `-SkipChecks`。
 
 项目已固定使用 `.venv` 解释器，并关闭终端自动环境激活，因此打开新终端时不会再执行 `conda-hook.ps1` 或 `conda activate base`。首次修改配置后，请关闭旧终端并新建一个终端使设置生效。
 

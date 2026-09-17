@@ -73,10 +73,6 @@ function Find-Python310 {
 if (-not (Test-Path -LiteralPath $lockFile -PathType Leaf)) {
     throw "Dependency lock file was not found: $lockFile"
 }
-if ((Test-Path -LiteralPath $venvPython -PathType Leaf) -and
-    -not (Test-Python310 $venvPython)) {
-    throw "The existing .venv is not a valid Python 3.10 environment. Rename or remove .venv, then run this script again."
-}
 if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
     if (-not $PythonPath) { $PythonPath = Find-Python310 }
     if (-not (Test-Python310 $PythonPath)) {
